@@ -1,0 +1,3876 @@
+Complete Guide to NASA Earth Science Data Formats and
+Specifications
+Table of Contents
+1. Introduction
+2. Primary Scientific Data Formats
+3. Meteorological Data Formats
+4. Standard Exchange Formats
+5. Satellite Imagery Formats
+6. Partner Data Formats (CPTEC-INPE)
+7. Data Access APIs and Protocols
+8. Format Conversion and Processing
+9. Implementation Guidelines
+10. Best Practices and Optimization
+Introduction
+This comprehensive guide covers all data formats you'll encounter when building a weather
+probability platform using NASA Earth observation data and international partner resources.
+Understanding these formats is crucial for proper data integration, processing, and analysis.
+Data Format Categories
+Scientific Data Formats:
+NetCDF (Network Common Data Form)
+HDF (Hierarchical Data Format)
+HDF-EOS (Earth Observing System variant)
+Meteorological Standards:
+GRIB (GRIdded Binary)
+BUFR (Binary Universal Form)
+WMO Standard Formats
+Exchange Formats:
+JSON (JavaScript Object Notation)
+CSV (Comma-Separated Values)
+XML (eXtensible Markup Language)
+ASCII (American Standard Code)
+Imagery Formats:
+GeoTIFF and Cloud Optimized GeoTIFF
+JPEG2000
+PNG and various image formats
+Primary Scientific Data Formats
+NetCDF (Network Common Data Form)
+Overview
+NetCDF is the most common format for NASA Earth science data, designed for storing and sharing
+scientific data across different platforms and applications.
+Format Specifications
+NetCDF-3 (Classic)
+NetCDF-4 (Enhanced)
+Technical Details
+Structure:
+- Header: Contains metadata and data organization
+- Data Section: Binary data in specified format
+- Maximum file size: ~2GB
+- Data types: byte, char, short, int, float, double
+Built on HDF5:
+- Unlimited file size
+- Internal compression support
+- Groups and user-defined types
+- Parallel I/O capabilities
+- Better performance for large datasets
+Coordinate Systems:
+Longitude: -180° to +180° (West to East)
+Latitude: -90° to +90° (South to North)
+Time: CF-compliant time representation
+Vertical: Pressure levels, height, or model levels
+CF Conventions Compliance:
+Climate and Forecast metadata conventions
+Standardized variable names and units
+Coordinate system definitions
+Quality flags and missing value handling
+Programming Access Examples
+Python (xarray)
+python
+Python (netCDF4)
+import xarray as xr
+import numpy as np
+# Open NetCDF file
+dataset = xr.open_dataset('temperature_data.nc')
+# Access variables
+temperature = dataset['air_temperature']
+longitude = dataset['longitude']
+latitude = dataset['latitude']
+time = dataset['time']
+# Subset data
+subset = dataset.sel(
+ longitude=slice(--120, --80),
+ latitude=slice(25, 50),
+ time='2023-01-01'
+)
+# Basic statistics
+mean_temp = temperature.mean(dim=['longitude', 'latitude'])
+std_temp = temperature.std(dim=['longitude', 'latitude'])
+# C # Cononvver ert units i t units if needed f needed
+temp_celsius = temperature -- 273.15 # Kelvin to Celsius
+# Sav # Save pr e prococess essed dat ed dataa
+subset.to_netcdf('processed_temperature.nc')
+python
+Data Structure Example
+import netCDF4 as nc
+import numpy as np
+# Read NetCDF file
+dataset = nc.Dataset('weather_data.nc', 'r')
+# Examine structure
+print("Dimensions:", dataset.dimensions.keys())
+print("Variables:", dataset.variables.keys())
+print("Global attributes:", dataset.ncattrs())
+# Access data
+temperature = dataset.variables['temperature'][:]
+lat = dataset.variables['latitude'][:]
+lon = dataset.variables['longitude'][:]
+# Get metadata
+temp_units = dataset.variables['temperature'].units
+temp_description = dataset.variables['temperature'].long_name
+# Close file
+dataset.close()
+HDF (Hierarchical Data Format)
+HDF4 Specifications
+Structure:
+Scientific Data Sets (SDS): Multi-dimensional arrays
+Vdata: Table-like structures
+netcdf temperature_analysis {
+dimensions:
+ time = UNLIMITED ; // (8760 currently)
+ latitude = 180 ;
+ longitude = 360 ;
+ level = 17 ;
+variables:
+ double time(time) ;
+ time:units = "hours since 1990-01-01 00:00:00" ;
+ time:calendar = "gregorian" ;
+ time:standard_name = "time" ;
+
+ float latitude(latitude) ;
+ latitude:units = "degrees_north" ;
+ latitude:standard_name = "latitude" ;
+
+ float longitude(longitude) ;
+ longitude:units = "degrees_east" ;
+ longitude:standard_name = "longitude" ;
+
+ float air_temperature(time, level, latitude, longitude) ;
+ air_temperature:units = "K" ;
+ air_temperature:standard_name = "air_temperature" ;
+ air_temperature:_FillValue = -999.f ;
+ air_temperature:valid_range = 180.f, 330.f ;
+// global attributes:
+ :title = "Global Weather Analysis" ;
+ :institution = "NASA GSFC" ;
+ :source = "MERRA-2 Reanalysis" ;
+ :Conventions = "CF-1.8" ;
+}
+Raster Images: 8-bit and 24-bit images
+Annotations: Text descriptions
+Programming Access:
+HDF5 Specifications
+Advanced Features:
+Groups: Hierarchical organization like file directories
+Datasets: Multidimensional arrays with metadata
+Attributes: Metadata associated with groups or datasets
+Compression: Various compression algorithms
+Chunking: Optimal data access patterns
+Structure Example:
+python
+from pyhdf.SD import SD, SDC
+# Open HDF4 file
+hdf_file = SD('modis_data.hdf', SDC.READ)
+# List datasets
+datasets = hdf_file.datasets()
+for name, info in datasets.items():
+ print(f"Dataset: {name}, Shape: {info[1]}, Type: {info[3]}")
+# R # Read speci ead speciffic dat ic datas aset et
+sds = hdf_file.select('surface_temperature')
+data = sds.get()
+attributes = sds.attributes()
+# Access metadata
+for attr_name, attr_value in attributes.items():
+ print(f"{attr_name}: {attr_value}")
+sds.endaccess()
+hdf_file.end()
+Python Access (h5py):
+/ # Root group
+├── MetaData/ # Metadata group
+│ ├── ProductionDateTime
+│ ├── InputPointer
+│ └── LocalGranuleID
+├── HDFEOS/ # Earth Observing System group
+│ └── GRIDS/ # Grid data structure
+│ └── VNP_Grid_1km/
+│ └── Data_Fields/
+│ ├── sur_refl_b01
+│ ├── sur_refl_b02
+│ └── QC_500m
+└── HDFEOS_INFORMATION/ # Format information
+ ├── StructMetadata.0
+ └── coremetadata.0
+python
+import h5py
+import numpy as np
+# Open HDF5 file
+with h5py.File('viirs_data.h5', 'r') as hdf_file:
+ # Navigate structure
+ def print_structure(name, obj):
+ print(name)
+ hdf_file.visititems(print_structure)
+
+ # Access dataset
+ dataset_path = '/HDFEOS/GRIDS/VNP_Grid_1km/Data_Fields/sur_refl_b01'
+ surface_reflectance = hdf_file[dataset_path][:]
+
+ # Get attributes
+ attrs = dict(hdf_file[dataset_path].attrs)
+ scale_factor = attrs.get('scale_factor', 1.0)
+ add_offset = attrs.get('add_offset', 0.0)
+
+ # Apply scaling
+ reflectance_scaled = surface_reflectance * scale_factor + add_offset
+HDF-EOS (Earth Observing System)
+Specialized Data Structures
+Grid Structure:
+Regular latitude-longitude grids
+Map projections (UTM, Sinusoidal, etc.)
+Pixel registration information
+Swath Structure:
+Along-track satellite data
+Geolocation information
+Irregular spatial sampling
+Point Structure:
+Sparse point measurements
+Station data or field observations
+Access Example
+python
+Meteorological Data Formats
+GRIB (GRIdded Binary)
+GRIB1 Specifications
+Structure:
+import gdal
+import numpy as np
+# Open HDF-EOS file using GDAL
+dataset = gdal.Open('MOD13Q1.A2023001.h12v04.006.hdf')
+# Get subdatasets
+subdatasets = dataset.GetSubDatasets()
+for i, (subdataset_name, description) in enumerate(subdatasets):
+ print(f"Subdataset {i}: {description}")
+ print(f"Path: {subdataset_name}")
+# Open specific subdataset
+ndvi_dataset = gdal.Open(subdatasets[0][0]) # First subdataset
+ndvi_data = ndvi_dataset.ReadAsArray()
+# Get geospatial information
+geotransform = ndvi_dataset.GetGeoTransform()
+projection = ndvi_dataset.GetProjection()
+# Apply scale factors
+ndvi_scaled = ndvi_data * 0.0001 # Typical MODIS scaling
+Data Encoding:
+Binary packing: Efficient storage of gridded data
+Decimal scaling: Precision control
+Missing value handling: Bit maps for data gaps
+GRIB2 Enhanced Features
+Improved Structure:
+GRIB Message Components:
+├── Section 0: Indicator Section (8 bytes)
+│ ├── "GRIB" identifier
+│ ├── Total message length
+│ └── Edition number
+├── Section 1: Product Definition Section
+│ ├── Parameter table version
+│ ├── Center identification
+│ ├── Model identification
+│ ├── Grid identification
+│ ├── Parameter number
+│ ├── Level type and value
+│ └── Reference time
+├── Section 2: Grid Description Section (optional)
+│ ├── Grid type
+│ ├── Grid dimensions
+│ └── Coordinate information
+├── Section 3: Bit Map Section (optional)
+│ └── Missing data indicators
+├── Section 4: Binary Data Section
+│ ├── Binary data representation
+│ ├── Decimal scaling
+│ └── Packed data values
+└── Section 5: End Section
+ └── "7777" terminator
+Programming Access
+Python (pygrib)
+GRIB2 Message:
+├── Section 0: Indicator Section (16 bytes)
+├── Section 1: Identification Section
+│ ├── Reference time (year, month, day, hour, minute, second)
+│ ├── Production status
+│ └── Data type
+├── Section 2: Local Use Section (optional)
+├── Section 3: Grid Definition Section
+│ ├── Grid definition template
+│ ├── Number of data points
+│ └── Grid template parameters
+├── Section 4: Product Definition Section
+│ ├── Product definition template
+│ ├── Parameter category and number
+│ ├── Generating process type
+│ ├── Forecast time
+│ └── Level information
+├── Section 5: Data Representation Section
+│ ├── Data representation template
+│ ├── Compression method
+│ └── Packing parameters
+├── Section 6: Bit Map Section (optional)
+├── Section 7: Data Section
+│ └── Packed binary data
+└── Section 8: End Section
+python
+Command Line Tools:
+import pygrib
+import numpy as np
+import matplotlib.pyplot as plt
+# Open GRIB file
+grbs = pygrib.open('gfs.grib2')
+# List all messages
+for grb in grbs:
+ print(f"{grb.parameterName}: {grb.level} {grb.typeOfLevel}")
+# Select speci # Select speciffic p ic par aramet ameter er
+grbs.rewind() # Reset to beginning
+temperature = grbs.select(parameterName='Temperature', typeOfLevel='surface')[0]
+# Extr # Extract dat act data and c a and coor oordinat dinateses
+temp_data, lats, lons = temperature.data()
+# Get metadata
+print(f"Units: {temperature.units}")
+print(f"Valid time: {temperature.validDate}")
+print(f"Forecast time: {temperature.forecastTime}")
+# Data processing
+temp_celsius = temp_data -- 273.15 # C # Cononvver ert K t t K to °C o °C
+# Statistical analysis
+mean_temp = np.mean(temp_celsius)
+min_temp = np.min(temp_celsius)
+max_temp = np.max(temp_celsius)
+grbs.close()
+bash
+GRIB Parameter Tables
+Common Parameters:
+# List GRIB contents
+wgrib2 -v forecast.grib2
+# Extr # Extract speci act speciffic p ic par aramet ameter er
+wgrib2 forecast.grib2 -match "TMP:surface" -csv output.csv
+# C # Cononvver ert t t to NetCDF o NetCDF
+wgrib2 forecast.grib2 -netcdf output.nc
+# Get inventory
+wgrib2 -s forecast.grib2
+python
+BUFR (Binary Universal Form)
+Structure and Specifications
+BUFR Message Components:
+GRIB_PARAMETERS = {
+ # T # Temper emperatur ature p e par aramet ameter erss
+ 'TMP': 'Temperature',
+ 'TMAX': 'Maximum temperature',
+ 'TMIN': 'Minimum temperature',
+ 'DPT': 'Dew point temperature',
+
+ # Pr # Precipit ecipitation p ation par aramet ameter erss
+ 'PRATE': 'Precipitation rate',
+ 'APCP': 'Total precipitation',
+ 'ACPCP': 'Convective precipitation',
+
+ # Wind parameters
+ 'UGRD': 'U-component of wind',
+ 'VGRD': 'V-component of wind',
+ 'WIND': 'Wind speed',
+ 'GUST': 'Wind gust speed',
+
+ # Pr # Pressur essure p e par aramet ameter erss
+ 'PRMSL': 'Mean sea level pressure',
+ 'PRES': 'Pressure',
+ 'HGT': 'Geopotential height',
+
+ # Moistur # Moisture p e par aramet ameter erss
+ 'RH': 'Relative humidity',
+ 'PWAT': 'Precipitable water',
+ 'TCDC': 'Total cloud cover'
+}
+Programming Access (eccodes):
+BUFR Message:
+├── Section 0: Indicator Section (8 bytes)
+│ ├── "BUFR" identifier
+│ ├── Total message length
+│ └── Edition number
+├── Section 1: Identification Section
+│ ├── Originating center
+│ ├── Update sequence number
+│ ├── Optional section flags
+│ ├── Data category
+│ ├── Data subcategory
+│ └── Reference time
+├── Section 2: Optional Section (conditional)
+├── Section 3: Data Description Section
+│ ├── Number of data subsets
+│ ├── Observed data flags
+│ └── Data descriptors
+├── Section 4: Data Section
+│ └── Binary data
+└── Section 5: End Section
+ └── "7777" terminator
+python
+import eccodes as ec
+def process_bufr_file(filename):
+ with open(filename, 'rb') as f:
+ while True:
+ # Get next BUFR message
+ bufr_id = ec.codes_bufr_new_from_file(f)
+ if bufr_id is None:
+ break
+
+ # Decode message
+ ec.codes_set(bufr_id, 'unpack', 1)
+
+ # Get basic information
+ edition = ec.codes_get(bufr_id, 'edition')
+ data_category = ec.codes_get(bufr_id, 'dataCategory')
+ num_subsets = ec.codes_get(bufr_id, 'numberOfSubsets')
+
+ print(f"Edition: {edition}, Category: {data_category}")
+ print(f"Number of subsets: {num_subsets}")
+
+ # Extract data
+ try:
+ # Get all keys
+ keys = ec.codes_keys_iterator_new(bufr_id, 'all')
+
+ while ec.codes_keys_iterator_next(keys):
+ key = ec.codes_keys_iterator_get_name(keys)
+ value = ec.codes_get(bufr_id, key)
+ print(f"{key}: {value}")
+
+ ec.codes_keys_iterator_delete(keys)
+
+ except Exception as e:
+ print(f"Error extracting data: {e}")
+
+ # Clean up
+ ec.codes_release(bufr_id)
+# Usage
+process_bufr_file('observation_data.bufr')
+Standard Exchange Formats
+JSON (JavaScript Object Notation)
+NASA JSON Specifications
+Earthdata Search API Response:
+json
+{
+ "feed": {
+ "updated": "2023-12-01T10:30:00.000Z",
+ "id": "https://cmr.earthdata.nasa.gov/search/collections.json",
+ "title": "ECHO dataset metadata",
+ "entry": [
+ {
+ "id": "C1234567890-LAADS",
+ "title": "MODIS Aqua Level 1B Calibrated Radiances 5-Min L1B Swath 1km",
+ "summary": "The MODIS Level 1B data set contains calibrated and geolocated at-aperture radiances for 36 ba
+ "time_start": "2002-07-04T00:00:00.000Z",
+ "time_end": null,
+ "updated": "2023-11-15T14:22:33.000Z",
+ "dataset_id": "MODIS Aqua L1B",
+ "short_name": "MYD021KM",
+ "version_id": "6.1",
+ "coordinate_system": "CARTESIAN",
+ "data_center": "LAADS",
+ "organizations": ["NASA/LARC/SD/ASDC"],
+ "platforms": ["Aqua"],
+ "instruments": ["MODIS"],
+ "archive_center": "LAADS",
+ "processing_level_id": "1B",
+ "collection_data_type": "SCIENCE_QUALITY",
+ "granule_count": 1456789,
+ "online_access_flag": true,
+ "links": [
+ {
+ "rel": "http://esipfed.org/ns/fedsearch/1.1/data#",
+ "type": "application/x-hdf",
+ "title": "Direct Download",
+ "href": "https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/61/MYD021KM/"
+ }
+ ],
+ "spatial": {
+ "type": "bbox",
+ "coordinates": [[-180, -90, 180, 90]]
+ },
+ "temporal": {
+ "range_date_time": [
+ {
+ "beginning_date_time": "2002-07-04T00:00:00.000Z",
+ "ending_date_time": null
+Data Rods API Response:
+ }
+ ]
+ }
+ }
+ ]
+ }
+}
+json
+{
+ "metadata": {
+ "service": "NLDAS_NOAH0125_H",
+ "version": "002",
+ "location": {
+ "latitude": 40.0,
+ "longitude": -100.0,
+ "description": "Central Nebraska"
+ },
+ "temporal": {
+ "start": "2023-01-01T00:00:00Z",
+ "end": "2023-12-31T23:00:00Z",
+ "resolution": "hourly"
+ },
+ "variable": {
+ "name": "TotalPrecip_inst",
+ "long_name": "Total precipitation rate",
+ "units": "kg/m^2/s",
+ "description": "Instantaneous total precipitation rate"
+ }
+ },
+ "data": [
+ {
+ "time": "2023-01-01T00:00:00Z",
+ "value": 0.0,
+ "quality": "good"
+ },
+ {
+ "time": "2023-01-01T01:00:00Z",
+ "value": 1.5e-6,
+ "quality": "good"
+ }
+ ],
+ "statistics": {
+ "count": 8760,
+ "mean": 2.3e-5,
+ "min": 0.0,
+ "max": 8.7e-4,
+ "standard_deviation": 4.1e-5
+ },
+ "quality_flags": {
+ "good": 8645,
+ "questionable": 98,
+Processing JSON Data
+Python Implementation:
+ "poor": 17,
+ "missing": 0
+ }
+}
+python
+import json
+import requests
+import pandas as pd
+from datetime import datetime
+class NASADataProcessor:
+ def __init__(self):
+ self.base_urls = {
+ 'earthdata_search': 'https://cmr.earthdata.nasa.gov/search/',
+ 'data_rods': 'https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/OTF/HTTP_services.cgi'
+ }
+
+ def search_collections(self, keyword, provider=None):
+ """Search for data collections using CMR API"""
+ url = f"{self.base_urls['earthdata_search']}collections.json"
+ params = {
+ 'keyword': keyword,
+ 'page_size': 20
+ }
+ if provider:
+ params['provider'] = provider
+
+ response = requests.get(url, params=params)
+ data = response.json()
+
+ collections = []
+ for entry in data['feed']['entry']:
+ collection = {
+ 'short_name': entry.get('short_name'),
+ 'version': entry.get('version_id'),
+ 'title': entry.get('title'),
+ 'summary': entry.get('summary'),
+ 'temporal_start': entry.get('time_start'),
+ 'temporal_end': entry.get('time_end'),
+ 'spatial_coverage': entry.get('spatial', {}).get('coordinates'),
+ 'data_center': entry.get('data_center'),
+ 'processing_level': entry.get('processing_level_id')
+ }
+ collections.append(collection)
+
+ return collections
+
+ def get_data_rods_timeseries(self, location, variable, start_date, end_date):
+ """Retrieve time series data from Data Rods API"""
+ params = {
+ 'FILENAME': '/data/NLDAS/NLDAS_NOAH0125_H.002/',
+ 'SERVICE': 'SUBSET_NLDAS',
+ 'VERSION': '1.02',
+ 'DATASET': 'NLDAS_NOAH0125_H.002',
+ 'VARIABLES': variable,
+ 'WEST': location['longitude'],
+ 'EAST': location['longitude'],
+ 'SOUTH': location['latitude'],
+ 'NORTH': location['latitude'],
+ 'STARTDATE': start_date,
+ 'ENDDATE': end_date,
+ 'FORMAT': 'bmM0Lw'
+ }
+
+ response = requests.get(self.base_urls['data_rods'], params=params)
+
+ if response.status_code == 200:
+ # P # Par arsse ASCII r e ASCII respons esponsee
+ lines = response.text.split('\n')
+ data_lines = [line for line in lines if line and not line.startswith('#')]
+
+ timeseries_data = []
+ for line in data_lines:
+ parts = line.split()
+ if len(parts) >= 2:
+ timestamp = parts[0]
+ value = float(parts[1])
+ timeseries_data.append({
+ 'time': timestamp,
+ 'value': value
+ })
+
+ return timeseries_data
+ else:
+ raise Exception(f"API request failed: {response.status_code}")
+# Usage example
+processor = NASADataProcessor()
+# Search for precipitation data
+collections = processor.search_collections("precipitation", "GES_DISC")
+for collection in collections[:3]:
+CSV (Comma-Separated Values)
+NASA CSV Standards
+File Naming Convention:
+Header Structure:
+Processing CSV Data:
+ print(f"{collection['short_name']}: {collection['title']}")
+# Get time series data
+location = {'latitude': 40.0, 'longitude': --100.0}
+data = processor.get_data_rods_timeseries(
+ location,
+ 'TotalPrecip_inst',
+ '2023-01-01T00:00',
+ '2023-01-31T23:59'
+)
+pattern: {dataset}_{location}_{temporal_range}_{version}.csv
+example: nldas_precipitation_40.0N_100.0W_2023_v002.csv
+csv
+# NASA Earth Science Data
+# Dataset: NLDAS NOAH Land Surface Model L4 Hourly 0.125 x 0.125 degree
+# Variable: Total Precipitation Rate (kg/m^2/s)
+# Location: 40.0°N, 100.0°W
+# Temporal Coverage: 2023-01-01 to 2023-12-31
+# Units: kg/m^2/s
+# Missing Value: -999
+# Quality Flags: 0=good, 1=questionable, 2=poor, 3=missing
+# Generated: 2024-01-15T10:30:00Z
+timestamp,precipitation_rate,quality_flag,latitude,longitude
+2023-01-01T00:00:00Z,0.0,0,40.0,-100.0
+2023-01-01T01:00:00Z,1.5e-06,0,40.0,-100.0
+2023-01-01T02:00:00Z,0.0,0,40.0,-100.0
+python
+import pandas as pd
+import numpy as np
+from datetime import datetime
+def process_nasa_csv(filename):
+ """Process NASA-formatted CSV file"""
+ # R # Read met ead metadat adata fr a from header c om header comments omments
+ metadata = {}
+ with open(filename, 'r') as f:
+ lines = f.readlines()
+ for line in lines:
+ if line.startswith('#'):
+ if ':' in line:
+ key, value = line[1:].split(':', 1)
+ metadata[key.strip()] = value.strip()
+ else:
+ break
+
+ # Read data
+ df = pd.read_csv(filename, comment='#', parse_dates=['timestamp'])
+
+ # Handle missing values
+ missing_value = float(metadata.get('Missing Value', --999))
+ df = df.replace(missing_value, np.nan)
+
+ # Filter by quality
+ good_data = df[df['quality_flag'] == 0]
+
+ # Basic statistics
+ stats = {
+ 'count': len(good_data),
+ 'mean': good_data['precipitation_rate'].mean(),
+ 'std': good_data['precipitation_rate'].std(),
+ 'min': good_data['precipitation_rate'].min(),
+ 'max': good_data['precipitation_rate'].max()
+ }
+
+ return df, metadata, stats
+# Usage
+data, metadata, statistics = process_nasa_csv('nldas_precipitation.csv')
+XML (eXtensible Markup Language)
+NASA XML Metadata Standards
+Collection Metadata Example:
+print(f"Dataset: {metadata.get('Dataset')}")
+print(f"Statistics: {statistics}")
+xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Collection xmlns="http://gcmd.gsfc.nasa.gov/Aboutus/xml/dif/"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+ <Entry_ID>MYD021KM_6</Entry_ID>
+ <Entry_Title>MODIS/Aqua Calibrated Radiances 5-Min L1B Swath 1km V006</Entry_Title>
+ <Dataset_Citation>
+ <Dataset_Creator>MODIS Science Team</Dataset_Creator>
+ <Dataset_Title>MODIS/Aqua Calibrated Radiances 5-Min L1B Swath 1km</Dataset_Title>
+ <Dataset_Release_Date>2017-01-01</Dataset_Release_Date>
+ <Dataset_Release_Place>Greenbelt, MD, USA</Dataset_Release_Place>
+ <Dataset_Publisher>Goddard Earth Sciences Data and Information Services Center (GES DISC)</Dataset_Publish
+ <Version>006</Version>
+ </Dataset_Citation>
+ <Personnel>
+ <Role>MET METADADAATTA A A AUTHOR UTHOR</Role>
+ <Contact_Person>
+ <First_Name>GES</First_Name>
+ <Last_Name>DISC</Last_Name>
+ </Contact_Person>
+ </Personnel>
+ <Science_Keywords>
+ <Category>EARTH SCIENCE</Category>
+ <Topic>SPECTRAL/ENGINEERING</Topic>
+ <Term>INFRARED WAVELENGTHS</Term>
+ <Variable_Level_1>THERMAL INFRARED</Variable_Level_1>
+ </Science_Keywords>
+ <Platform>
+ <Type>Earth Observation Satellites</Type>
+ <Short_Name>Aqua</Short_Name>
+ <Long_Name>Earth Observing System, Aqua</Long_Name>
+ <Instrument>
+ <Short_Name>MODIS</Short_Name>
+ <Long_Name>Moderate Resolution Imaging SpectroRadiometer</Long_Name>
+ </Instrument>
+ </Platform>
+ <Temporal_Coverage>
+ <Range_DateTime>
+ <Beginning_Date_Time>2002-07-04T00:00:00Z</Beginning_Date_Time>
+ <Ending_Date_Time>Present</Ending_Date_Time>
+ </Range_DateTime>
+ </Temporal_Coverage>
+ <Spatial_Coverage>
+ <Granule_Spatial_Representation>CARTESIAN</Granule_Spatial_Representation>
+Processing XML Metadata:
+ <Geometry>
+ <Coordinate_System>CARTESIAN</Coordinate_System>
+ <Bounding_Rectangle>
+ <Southernmost_Latitude>-90.0</Southernmost_Latitude>
+ <Northernmost_Latitude>90.0</Northernmost_Latitude>
+ <Westernmost_Longitude>-180.0</Westernmost_Longitude>
+ <Easternmost_Longitude>180.0</Easternmost_Longitude>
+ </Bounding_Rectangle>
+ </Geometry>
+ </Spatial_Coverage>
+ <Location>
+ <Location_Category>GEOGRAPHIC REGION</Location_Category>
+ <Location_Type>GLOBAL</Location_Type>
+ </Location>
+ <Data_Resolution>
+ <Latitude_Resolution>1 km</Latitude_Resolution>
+ <Longitude_Resolution>1 km</Longitude_Resolution>
+ <Temporal_Resolution>5 minutes</Temporal_Resolution>
+ </Data_Resolution>
+ <Project>
+ <Short_Name>EOSDIS</Short_Name>
+ <Long_Name>Earth Observing System Data Information System</Long_Name>
+ </Project>
+ <Access_Constraints>None</Access_Constraints>
+ <Use_Constraints>None</Use_Constraints>
+</Collection>
+python
+import xml.etree.ElementTree as ET
+from datetime import datetime
+import requests
+class XMLMetadataProcessor:
+ def __init__(self):
+ self.namespaces = {
+ 'dif': 'http://gcmd.gsfc.nasa.gov/Aboutus/xml/dif/',
+ 'gmd': 'http://www.isotc211.org/2005/gmd',
+ 'gco': 'http://www.isotc211.org/2005/gco'
+ }
+
+ def parse_collection_metadata(self, xml_content):
+ """Parse NASA collection metadata XML"""
+ root = ET.fromstring(xml_content)
+
+ metadata = {}
+
+ # Basic information
+ metadata['entry_id'] = self.get_text(root, './/Entry_ID')
+ metadata['title'] = self.get_text(root, './/Entry_Title')
+ metadata['version'] = self.get_text(root, './/Version')
+
+ # T # Tempor emporal c al coovver erage age
+ start_time = self.get_text(root, './/Beginning_Date_Time')
+ end_time = self.get_text(root, './/Ending_Date_Time')
+ metadata['temporal_coverage'] = {
+ 'start': start_time,
+ 'end': end_time
+ }
+
+ # Sp # Spatial c atial coovver erage age
+ bbox = {}
+ bbox['south'] = self.get_text(root, './/Southernmost_Latitude')
+ bbox['north'] = self.get_text(root, './/Northernmost_Latitude')
+ bbox['west'] = self.get_text(root, './/Westernmost_Longitude')
+ bbox['east'] = self.get_text(root, './/Easternmost_Longitude')
+ metadata['spatial_coverage'] = bbox
+
+ # Platform and instruments
+ metadata['platform'] = self.get_text(root, './/Platform/Short_Name')
+ metadata['instrument'] = self.get_text(root, './/Instrument/Short_Name')
+
+ASCII Data Formats
+NASA ASCII File Format Guidelines
+Standard Structure:
+ # Science keywords
+ keywords = []
+ for keyword in root.findall('.//Science_Keywords'):
+ category = self.get_text(keyword, './/Category')
+ topic = self.get_text(keyword, './/Topic')
+ term = self.get_text(keyword, './/Term')
+ keywords.append(f"{category} > {topic} > {term}")
+ metadata['keywords'] = keywords
+
+ # Resolution
+ metadata['resolution'] = {
+ 'spatial_lat': self.get_text(root, './/Latitude_Resolution'),
+ 'spatial_lon': self.get_text(root, './/Longitude_Resolution'),
+ 'temporal': self.get_text(root, './/Temporal_Resolution')
+ }
+
+ return metadata
+
+ def get_text(self, element, xpath):
+ """Safely extract text from XML element"""
+ try:
+ found = element.find(xpath)
+ return found.text if found is not None else None
+ except:
+ return None
+# Usage example
+processor = XMLMetadataProcessor()
+# P # Par arsse met e metadat adata fr a from f om file or URL ile or URL
+with open('collection_metadata.xml', 'r') as f:
+ xml_content = f.read()
+metadata = processor.parse_collection_metadata(xml_content)
+print(f"Dataset: {metadata['title']}")
+print(f"Platform: {metadata['platform']}")
+print(f"Temporal: {metadata['temporal_coverage']}")
+Processing ASCII Data:
+# NASA Earth Science Data File
+# File Format Version: 1.2
+# Data Level: Level 2
+# Originator: NASA GSFC
+# Mission: Terra
+# Instrument: MODIS
+# Product: Aerosol Optical Depth
+# Processing Version: 6.1
+# Start Time: 2023-01-01T00:00:00Z
+# End Time: 2023-01-01T23:59:59Z
+# Spatial Coverage: Global
+# Units: Dimensionless
+# Missing Data Value: -999.0
+# Scale Factor: 1.0
+# Offset: 0.0
+# Valid Range: 0.0 to 5.0
+/begin_header
+parameter_name=aerosol_optical_depth_550nm
+units=dimensionless
+missing=-999.0
+scale_factor=1.0
+add_offset=0.0
+valid_min=0.0
+valid_max=5.0
+long_name=Aerosol Optical Depth at 550nm
+standard_name=atmosphere_optical_thickness_due_to_aerosol
+/end_header
+longitude,latitude,time,aerosol_optical_depth,quality_flag
+-179.875,89.875,2023-01-01T00:00:00Z,0.145,0
+-179.625,89.875,2023-01-01T00:00:00Z,0.152,0
+-179.375,89.875,2023-01-01T00:00:00Z,-999.0,3
+python
+import pandas as pd
+import numpy as np
+import re
+class ASCIIDataProcessor:
+ def __init__(self):
+ self.header_pattern = r'/begin_header(.*?)/end_header'
+
+ def parse_ascii_file(self, filename):
+ """Parse NASA-standard ASCII data file"""
+ with open(filename, 'r') as f:
+ content = f.read()
+
+ # Extract header metadata
+ metadata = self.parse_header_comments(content)
+
+ # Extract structured header
+ header_match = re.search(self.header_pattern, content, re.DOTALL)
+ if header_match:
+ header_content = header_match.group(1)
+ structured_metadata = self.parse_structured_header(header_content)
+ metadata.update(structured_metadata)
+
+ # Read data section
+ lines = content.split('\n')
+ data_start = 0
+ for i, line in enumerate(lines):
+ if not line.startswith('#') and not line.startswith('/') and ',' in line:
+ # Check if this is the header line
+ if any(word in line.lower() for word in ['longitude', 'latitude', 'time']):
+ data_start = i
+ break
+
+ # Read CSV data
+ data_lines = lines[data_start:]
+ data_content = '\n'.join(data_lines)
+
+ from io import StringIO
+ df = pd.read_csv(StringIO(data_content))
+
+ # Apply data cleaning
+ df = self.clean_data(df, metadata)
+
+ return df, metadata
+
+ def parse_header_comments(self, content):
+ """Parse comment-style metadata"""
+ metadata = {}
+ lines = content.split('\n')
+
+ for line in lines:
+ if line.startswith('#'):
+ line = line[1:].strip()
+ if ':' in line:
+ key, value = line.split(':', 1)
+ metadata[key.strip()] = value.strip()
+
+ return metadata
+
+ def parse_structured_header(self, header_content):
+ """Parse structured header section"""
+ metadata = {}
+ lines = header_content.strip().split('\n')
+
+ for line in lines:
+ line = line.strip()
+ if '=' in line:
+ key, value = line.split('=', 1)
+ metadata[key.strip()] = self.convert_value(value.strip())
+
+ return metadata
+
+ def convert_value(self, value):
+ """Convert string values to appropriate types"""
+ # T # Trry t y to c o cononvver ert t t to number o number
+ try:
+ if '.' in value:
+ return float(value)
+ else:
+ return int(value)
+ except ValueError:
+ return value
+
+ def clean_data(self, df, metadata):
+ """Apply data cleaning based on metadata"""
+ # Handle missing values
+ missing_value = metadata.get('missing', --999.0)
+Satellite Imagery Formats
+GeoTIFF and Cloud Optimized GeoTIFF (COG)
+GeoTIFF Specifications
+Structure:
+ df = df.replace(missing_value, np.nan)
+
+ # Apply scaling
+ scale_factor = metadata.get('scale_factor', 1.0)
+ add_offset = metadata.get('add_offset', 0.0)
+
+ numeric_columns = df.select_dtypes(include=[np.number]).columns
+ for col in numeric_columns:
+ if col not in ['quality_flag', 'longitude', 'latitude']:
+ df[col] = df[col] * scale_factor + add_offset
+
+ # Apply v # Apply valid r alid range f ange filt ilter ering ing
+ valid_min = metadata.get('valid_min')
+ valid_max = metadata.get('valid_max')
+
+ if valid_min is not None and valid_max is not None:
+ for col in numeric_columns:
+ if col not in ['quality_flag', 'longitude', 'latitude']:
+ df[col] = df[col].where((df[col] >= valid_min) & (df[col] <= valid_max))
+
+ return df
+# Usage
+processor = ASCIIDataProcessor()
+data, metadata = processor.parse_ascii_file('aerosol_data.txt')
+print(f"Dataset shape: {data.shape}")
+print(f"Metadata: {metadata}")
+Reading GeoTIFF with Python:
+GeoTIFF File Components:
+├── TIFF Header
+│ ├── Image File Directory (IFD)
+│ ├── Tag entries
+│ └── Data offsets
+├── Geospatial Tags
+│ ├── ModelPixelScaleTag
+│ ├── ModelTiepointTag
+││ ├── ├── GeoK GeoKeyDirectoryT eyDirectoryTagag
+││ ├── ├── GeoDoubleP GeoDoubleParamsT aramsTagag
+││ ├── ├── GeoAsciiP GeoAsciiParamsT aramsTagag
+││ └── └── ProjectedCST ProjectedCSTypeGeoK ypeGeoKeyey
+├── Image Data
+│ ├── Pixel values
+│ ├── Band interleaving
+│ └── Compression (LZW, JPEG, etc.)
+└── Metadata
+ ├── Coordinate Reference System
+ ├── Spatial resolution
+ └── Band descriptions
+python
+import rasterio
+import numpy as np
+from rasterio.plot import show
+from rasterio.windows import Window
+import matplotlib.pyplot as plt
+class GeoTIFFProcessor:
+ def __init__(self):
+ self.supported_formats = ['.tif', '.tiff', '.cog']
+
+ def read_geotiff(self, filename):
+ """Read and analyze GeoTIFF file"""
+ with rasterio.open(filename) as dataset:
+ # Get basic information
+ metadata = {
+ 'driver': dataset.driver,
+ 'count': dataset.count, # Number of bands
+ 'dtype': dataset.dtypes[0],
+ 'width': dataset.width,
+ 'height': dataset.height,
+ 'crs': dataset.crs,
+ 'transform': dataset.transform,
+ 'bounds': dataset.bounds,
+ 'nodata': dataset.nodata
+ }
+
+ # Read all bands
+ data = dataset.read() # Shape: (bands, height, width)
+
+ # Get individual band information
+ band_info = []
+ for i in range(dataset.count):
+ band_data = {
+ 'index': i + 1,
+ 'dtype': dataset.dtypes[i],
+ 'nodata': dataset.nodatavals[i],
+ 'description': dataset.descriptions[i],
+ 'units': dataset.units[i] if hasattr(dataset, 'units') else None
+ }
+ band_info.append(band_data)
+
+ metadata['bands'] = band_info
+
+ return data, metadata
+
+ def spatial_subset(self, filename, bbox):
+ """Extract spatial subset using bounding box"""
+ # bbox format: [min_x, min_y, max_x, max_y]
+ with rasterio.open(filename) as dataset:
+ # C # Cononvver ert geogr t geographic c aphic coor oordinat dinates t es to pix o pixel c el coor oordinat dinateses
+ window = rasterio.windows.from_bounds(*bbox, dataset.transform)
+
+ # Read subset
+ subset_data = dataset.read(window=window)
+
+ # Update transform for subset
+ subset_transform = rasterio.windows.transform(window, dataset.transform)
+
+ return subset_data, subset_transform
+
+ def reproject_data(self, filename, target_crs='EPSG:4326'):
+ """Reproject GeoTIFF to different coordinate system"""
+ from rasterio.warp import calculate_default_transform, reproject, Resampling
+
+ with rasterio.open(filename) as src:
+ transform, width, height = calculate_default_transform(
+ src.crs, target_crs, src.width, src.height, *src.bounds)
+
+ kwargs = src.meta.copy()
+ kwargs.update({
+ 'crs': target_crs,
+ 'transform': transform,
+ 'width': width,
+ 'height': height
+ })
+
+ # Create output array
+ reprojected_data = np.empty((src.count, height, width), dtype=src.dtypes[0])
+
+ # Reproject each band
+ for i in range(src.count):
+ reproject(
+ source=rasterio.band(src, i + 1),
+ destination=reprojected_data[i],
+ src_transform=src.transform,
+ src_crs=src.crs,
+ dst_transform=transform,
+Cloud Optimized GeoTIFF (COG)
+COG Optimization Features:
+Tiling: Internal tile structure for efficient access
+Overviews: Multi-resolution pyramids
+Compression: Optimized compression algorithms
+HTTP Range Requests: Partial file reading from cloud storage
+Creating COG:
+ dst_crs=target_crs,
+ resampling=Resampling.nearest)
+
+ return reprojected_data, kwargs
+# Example usage
+processor = GeoTIFFProcessor()
+# R # Read MODIS sur ead MODIS surfac face r e ref eflect lectanc ance dat e dataa
+data, metadata = processor.read_geotiff('MOD09GA.A2023001.h12v04.006.sur_refl_b01.tif')
+print(f"Data shape: {data.shape}")
+print(f"CRS: {metadata['crs']}")
+print(f"Bounds: {metadata['bounds']}")
+# Extr # Extract subs act subset for speci et for speciffic r ic region egion
+bbox = [--120, 35, --115, 40] # Western US
+subset_data, subset_transform = processor.spatial_subset(
+ 'MOD09GA.A2023001.h12v04.006.sur_refl_b01.tif',
+ bbox
+)
+# Visualize
+plt.figure(figsize=(10, 8))
+plt.imshow(data[0], cmap='viridis')
+plt.colorbar(label='Surface Reflectance')
+plt.title('MODIS Surface Reflectance')
+plt.show()
+python
+JPEG2000 Format
+Specifications for Satellite Imagery
+JPEG2000 Features:
+Lossless and lossy compression
+Progressive transmission
+import rasterio
+from rasterio.io import MemoryFile
+from rasterio.shutil import copy
+def create_cog(input_file, output_file):
+ """Convert regular GeoTIFF to Cloud Optimized GeoTIFF"""
+
+ # COG creation options
+ cog_profile = {
+ 'driver': 'GTiff',
+ 'interleave': 'pixel',
+ 'tiled': True,
+ 'blockxsize': 512,
+ 'blockysize': 512,
+ 'compress': 'LZW',
+ 'BIGTIFF': 'IF_SAFER'
+ }
+
+ with rasterio.open(input_file) as src:
+ profile = src.profile
+ profile.update(cog_profile)
+
+ with rasterio.open(output_file, 'w', **profile) as dst:
+ # Copy data
+ for i in range(src.count):
+ dst.write(src.read(i + 1), i + 1)
+
+ # Build overviews
+ factors = [2, 4, 8, 16]
+ dst.build_overviews(factors, Resampling.average)
+ dst.update_tags(ns='GDAL', OVR_RESAMPLING='AVERAGE')
+# Usage
+create_cog('input_data.tif', 'output_data_cog.tif')
+Region of interest coding
+Error resilience
+Metadata support
+Processing JPEG2000:
+python
+import glymur
+import numpy as np
+from PIL import Image
+class JPEG2000Processor:
+ def __init__(self):
+ self.supported_extensions = ['.jp2', '.j2k', '.jpc']
+
+ def read_jp2(self, filename):
+ """Read JPEG2000 file"""
+ jp2 = glymur.Jp2k(filename)
+
+ # Get image metadata
+ metadata = {
+ 'shape': jp2.shape,
+ 'dtype': jp2.dtype,
+ 'codestream': str(jp2.codestream),
+ 'boxes': [str(box) for box in jp2.box]
+ }
+
+ # Read image data
+ data = jp2[:]
+
+ return data, metadata
+
+ def read_region(self, filename, region):
+ """Read specific region from JPEG2000"""
+ # r # region for egion format: (y_st mat: (y_star art, y_end, x_st t, y_end, x_star art, x_end) t, x_end)
+ jp2 = glymur.Jp2k(filename)
+
+ y_start, y_end, x_start, x_end = region
+ data = jp2[y_start:y_end, x_start:x_end]
+
+ return data
+
+ def read_at_resolution(self, filename, reduction_level):
+ """Read at reduced resolution"""
+ jp2 = glymur.Jp2k(filename)
+
+ # r # reduction_lev eduction_level: 0=f el: 0=full, 1=half ull, 1=half, 2=quar , 2=quartter er, et , etc. c.
+ data = jp2[::2**reduction_level, ::2**reduction_level]
+
+ return data
+MODIS and VIIRS Imagery Formats
+MODIS HDF-EOS Format
+Band Configuration:
+# Ex # Example us ample usage for s age for sat atellit ellite imager e imageryy
+processor = JPEG2000Processor()
+# Read Sentinel-2 JPEG2000 tile
+data, metadata = processor.read_jp2('S2A_MSIL1C_20230101T103321_N0509_R108_T32TPS_20230101T123456.jp2
+print(f"Image shape: {data.shape}")
+print(f"Data type: {data.dtype}")
+# R # Read speci ead speciffic r ic region (e.g., city ar egion (e.g., city area) ea)
+city_region = (1000, 2000, 1500, 2500) # y1, y2, x1, x2
+city_data = processor.read_region('sentinel2_tile.jp2', city_region)
+# R # Read at r ead at reduc educed r ed resesolution for o olution for ovver erview view
+overview_data = processor.read_at_resolution('sentinel2_tile.jp2', 2) # 1/4 resolution
+python
+MODIS_BANDS = {
+ # Land bands (Terra and Aqua)
+ 'terra': {
+ 'MOD09': { # Sur # Surfac face R e Ref eflect lectanc ancee
+ 'sur_refl_b01': {'wavelength': '620-670nm', 'resolution': '250m'},
+ 'sur_refl_b02': {'wavelength': '841-876nm', 'resolution': '250m'},
+ 'sur_refl_b03': {'wavelength': '459-479nm', 'resolution': '500m'},
+ 'sur_refl_b04': {'wavelength': '545-565nm', 'resolution': '500m'},
+ 'sur_refl_b05': {'wavelength': '1230-1250nm', 'resolution': '500m'},
+ 'sur_refl_b06': {'wavelength': '1628-1652nm', 'resolution': '500m'},
+ 'sur_refl_b07': {'wavelength': '2105-2155nm', 'resolution': '500m'}
+ },
+ 'MOD11': { # L # Land Sur and Surfac face T e Temper emperatur aturee
+ 'LST_Day_1km': {'description': 'Daytime Land Surface Temperature', 'resolution': '1km'},
+ 'LST_Night_1km': {'description': 'Nighttime Land Surface Temperature', 'resolution': '1km'},
+ 'QC_Day': {'description': 'Quality control for daytime LST', 'resolution': '1km'},
+ 'QC_Night': {'description': 'Quality control for nighttime LST', 'resolution': '1km'}
+ }
+ }
+}
+def process_modis_hdf(filename):
+ """Process MODIS HDF-EOS file"""
+ from pyhdf.SD import SD, SDC
+ import numpy as np
+
+ # Open HDF file
+ hdf = SD(filename, SDC.READ)
+
+ # Get dataset information
+ datasets = hdf.datasets()
+
+ data_arrays = {}
+ metadata = {}
+
+ for dataset_name, info in datasets.items():
+ # Read dataset
+ sds = hdf.select(dataset_name)
+ data = sds.get()
+ attrs = sds.attributes()
+
+ # Apply scaling factors
+ scale_factor = attrs.get('scale_factor', 1.0)
+VIIRS Imagery Processing
+VIIRS Band Configuration:
+ add_offset = attrs.get('add_offset', 0.0)
+ valid_range = attrs.get('valid_range', None)
+ fill_value = attrs.get('_FillValue', None)
+
+ # Scale data
+ if scale_factor != 1.0 or add_offset != 0.0:
+ data = data.astype(np.float32) * scale_factor + add_offset
+
+ # Handle fill values
+ if fill_value is not None:
+ data = np.ma.masked_equal(data, fill_value)
+
+ # Apply valid range
+ if valid_range is not None:
+ data = np.ma.masked_outside(data, valid_range[0], valid_range[1])
+
+ data_arrays[dataset_name] = data
+ metadata[dataset_name] = attrs
+
+ sds.endaccess()
+
+ hdf.end()
+
+ return data_arrays, metadata
+# Ex # Example: Pr ample: Prococess MODIS sur ess MODIS surfac face r e ref eflect lectanc ancee
+data_arrays, metadata = process_modis_hdf('MOD09GA.A2023001.h12v04.006.hdf')
+# Calculat # Calculate ND e NDVI fr VI from r om red and NIR b ed and NIR bands ands
+red_band = data_arrays['sur_refl_b01']
+nir_band = data_arrays['sur_refl_b02']
+ndvi = (nir_band -- red_band) / (nir_band + red_band)
+python
+VIIRS_BANDS = {
+ 'imaging_bands': { # I-bands (375m resolution)
+ 'I01': {'wavelength': '600-680nm', 'description': 'Red'},
+ 'I02': {'wavelength': '845-885nm', 'description': 'Near-IR'},
+ 'I03': {'wavelength': '1580-1640nm', 'description': 'SWIR'},
+ 'I04': {'wavelength': '3550-3930nm', 'description': 'MWIR'},
+ 'I05': {'wavelength': '10500-12400nm', 'description': 'LWIR'}
+ },
+ 'moderate_bands': { # M-bands (750m resolution)
+ 'M01': {'wavelength': '402-422nm', 'description': 'Violet'},
+ 'M02': {'wavelength': '436-454nm', 'description': 'Blue'},
+ 'M03': {'wavelength': '478-498nm', 'description': 'Blue'},
+ 'M04': {'wavelength': '545-565nm', 'description': 'Green'},
+ 'M05': {'wavelength': '662-682nm', 'description': 'Red'},
+ 'M07': {'wavelength': '846-885nm', 'description': 'Near-IR'},
+ 'M08': {'wavelength': '1230-1250nm', 'description': 'SWIR'},
+ 'M10': {'wavelength': '1580-1640nm', 'description': 'SWIR'},
+ 'M11': {'wavelength': '2225-2275nm', 'description': 'SWIR'}
+ }
+}
+def process_viirs_hdf5(filename):
+ """Process VIIRS HDF5 file"""
+ import h5py
+ import numpy as np
+
+ with h5py.File(filename, 'r') as hdf:
+ # Navigate VIIRS structure
+ data_fields_path = '/HDFEOS/GRIDS/VNP_Grid_1km/Data_Fields/'
+
+ datasets = {}
+
+ # List available datasets
+ if data_fields_path in hdf:
+ data_fields = hdf[data_fields_path]
+
+ for dataset_name in data_fields.keys():
+ dataset = data_fields[dataset_name]
+ data = dataset[:]
+
+ # Get attributes
+ attrs = dict(dataset.attrs)
+ scale_factor = attrs.get('scale_factor', 1.0)
+Partner Data Formats (CPTEC-INPE)
+BRAMS Model Output Formats
+BRAMS Data Structure
+Output File Organization:
+ add_offset = attrs.get('add_offset', 0.0)
+ fill_value = attrs.get('_FillValue', None)
+ valid_range = attrs.get('valid_range', None)
+
+ # Apply scaling
+ if isinstance(scale_factor, (int, float)) and scale_factor != 1.0:
+ data = data.astype(np.float32) * scale_factor
+ if isinstance(add_offset, (int, float)) and add_offset != 0.0:
+ data = data + add_offset
+
+ # Handle fill values
+ if fill_value is not None:
+ data = np.ma.masked_equal(data, fill_value)
+
+ datasets[dataset_name] = {
+ 'data': data,
+ 'attributes': attrs
+ }
+
+ return datasets
+# Usage example
+viirs_data = process_viirs_hdf5('VNP09GA.A2023001.h12v04.001.hdf5')
+# Ac # Acccess sur ess surfac face r e ref eflect lectanc ance b e bands ands
+if 'SurfReflect_I1' in viirs_data:
+ red_reflectance = viirs_data['SurfReflect_I1']['data']
+ print(f"Red reflectance shape: {red_reflectance.shape}")
+Reading BRAMS Output:
+BRAMS Output Structure:
+├── Meteorological Variables
+││ ├── ├── T Temperature (THET emperature (THETA) A)
+│ ├── Pressure (PI)
+│ ├── Winds (UP, VP, WP)
+│ ├── Moisture (RV, RC, RR)
+│ └── Turbulent kinetic energy (TKEP)
+├── Surface Variables
+│ ├── Surface temperature (TOPT)
+│ ├── Surface pressure (PCPG)
+│ ├── Precipitation (PCPG)
+│ └── Surface fluxes
+├── ├── Chemical V Chemical Variables (if C ariables (if CCACATTT enabled) T enabled)
+│ ├── CO concentration
+│ ├── NOx species
+│ ├── Aerosol optical depth
+│ └── PM2.5 and PM10
+└── Grid Information
+ ├── Longitude (GLON)
+ ├── Latitude (GLAT)
+ ├── Topography (TOPT)
+ └── Land use (PATCH_AREA)
+python
+import struct
+import numpy as np
+from scipy.io import FortranFile
+class BRAMSReader:
+ def __init__(self):
+ self.variable_info = {
+ 'THETA': {'description': 'Potential Temperature', 'units': 'K'},
+ 'PI': {'description': 'Exner Function', 'units': 'dimensionless'},
+ 'UP': {'description': 'U-wind component', 'units': 'm/s'},
+ 'VP': {'description': 'V-wind component', 'units': 'm/s'},
+ 'WP': {'description': 'W-wind component', 'units': 'm/s'},
+ 'RV': {'description': 'Water vapor mixing ratio', 'units': 'kg/kg'},
+ 'PCPG': {'description': 'Total precipitation', 'units': 'mm'},
+ 'TOPT': {'description': 'Surface temperature', 'units': 'K'}
+ }
+
+ def read_brams_binary(self, filename):
+ """Read BRAMS binary output file"""
+ data = {}
+
+ with FortranFile(filename, 'r') as f:
+ # Read header information
+ header = f.read_record(dtype='<i4')
+
+ # T # Typically includes: nx, n ypically includes: nx, nyy, nz, n , nz, nvvar ar, time_info , time_info
+ nx, ny, nz = header[0], header[1], header[2]
+ nvar = header[3] if len(header) > 3 else 1
+
+ print(f"Grid dimensions: {nx} x {ny} x {nz}")
+ print(f"Number of variables: {nvar}")
+
+ # R # Read c ead coor oordinat dinate infor e information mation
+ lons = f.read_record(dtype='<f4').reshape((ny, nx))
+ lats = f.read_record(dtype='<f4').reshape((ny, nx))
+
+ data['longitude'] = lons
+ data['latitude'] = lats
+
+ # Read variables
+ for var_idx in range(nvar):
+ # V # Var ariable name (8 char iable name (8 charact acter ers)s)
+ var_name = f.read_record(dtype='c')[0:8].decode().strip()
+
+ # Variable data
+ if nz > 1:
+ # 3D variable
+ var_data = f.read_record(dtype='<f4').reshape((nz, ny, nx))
+ else:
+ # 2D variable
+ var_data = f.read_record(dtype='<f4').reshape((ny, nx))
+
+ data[var_name] = var_data
+ print(f"Read variable: {var_name}, shape: {var_data.shape}")
+
+ return data
+
+ def read_brams_grads(self, ctl_file):
+ """Read BRAMS GrADS format output"""
+ import re
+
+ # P # Par arsse c e contr ontrol f ol fileile
+ with open(ctl_file, 'r') as f:
+ ctl_content = f.read()
+
+ # Extract dimensions
+ xdef_match = re.search(r'XDEF\s+(\d+)\s+LINEAR\s+([\d.-]+)\s+([\d.-]+)', ctl_content)
+ ydef_match = re.search(r'YDEF\s+(\d+)\s+LINEAR\s+([\d.-]+)\s+([\d.-]+)', ctl_content)
+ zdef_match = re.search(r'ZDEF\s+(\d+)\s+LEVELS\s+(.*)', ctl_content)
+ tdef_match = re.search(r'TDEF\s+(\d+)\s+LINEAR\s+(\w+)\s+(\w+)', ctl_content)
+
+ grid_info = {
+ 'nx': int(xdef_match.group(1)),
+ 'ny': int(ydef_match.group(1)),
+ 'nz': int(zdef_match.group(1)) if zdef_match else 1,
+ 'nt': int(tdef_match.group(1)) if tdef_match else 1,
+ 'lon_start': float(xdef_match.group(2)),
+ 'lon_increment': float(xdef_match.group(3)),
+ 'lat_start': float(ydef_match.group(2)),
+ 'lat_increment': float(ydef_match.group(3))
+ }
+
+ # Extract variable information
+ vars_section = re.search(r'VARS\s+(\d+)(.*?)ENDVARS', ctl_content, re.DOTALL)
+ variables = []
+
+ if vars_section:
+ var_lines = vars_section.group(2).strip().split('\n')
+ for line in var_lines:
+ parts = line.split()
+ if len(parts) >= 3:
+ var_info = {
+ 'name': parts[0],
+ 'levels': int(parts[1]),
+ 'description': ' '.join(parts[2:])
+ }
+ variables.append(var_info)
+
+ return grid_info, variables
+
+ def convert_to_netcdf(self, brams_data, output_file):
+ """Convert BRAMS data to NetCDF format"""
+ import xarray as xr
+
+ # Cr # Creat eate c e coor oordinat dinate arr e arrays ays
+ ny, nx = brams_data['longitude'].shape
+ lons = brams_data['longitude'][0, :] # Assuming regular grid
+ lats = brams_data['latitude'][:, 0] # Assuming regular grid
+
+ # Create dataset
+ datasets = {}
+
+ for var_name, var_data in brams_data.items():
+ if var_name in ['longitude', 'latitude']:
+ continue
+
+ if len(var_data.shape) == 2:
+ # 2D variable
+ datasets[var_name] = (['lat', 'lon'], var_data)
+ elif len(var_data.shape) == 3:
+ # 3D variable
+ nz = var_data.shape[0]
+ levels = np.arange(nz)
+ datasets[var_name] = (['level', 'lat', 'lon'], var_data)
+
+ # Cr # Creat eate x e xarr array dat ay datas aset et
+ coords = {
+ 'lon': lons,
+ 'lat': lats
+ }
+
+ if any(len(v.shape) == 3 for v in brams_data.values() if isinstance(v, np.ndarray)):
+ coords['level'] = np.arange(max(v.shape[0] for v in brams_data.values()
+ if isinstance(v, np.ndarray) and len(v.shape) == 3))
+
+ ds = xr.Dataset(datasets, coords=coords)
+
+ # Add metadata
+ ds.attrs['title'] = 'BRAMS Model Output'
+ ds.attrs['institution'] = 'CPTEC/INPE'
+ ds.attrs['source'] = 'BRAMS Atmospheric Model'
+ ds.attrs['Conventions'] = 'CF-1.8'
+
+ # Add variable attributes
+ for var_name in ds.data_vars:
+ if var_name in self.variable_info:
+ ds[var_name].attrs['long_name'] = self.variable_info[var_name]['description']
+ ds[var_name].attrs['units'] = self.variable_info[var_name]['units']
+
+ # Save to NetCDF
+ ds.to_netcdf(output_file)
+
+ return ds
+# Usage example
+reader = BRAMSReader()
+# Read BRAMS binary output
+brams_data = reader.read_brams_binary('BRAMS-4.2-A-2023-01-01-0000.bin')
+# C # Cononvver ert t t to NetCDF for easier pr o NetCDF for easier prococessing essing
+dataset = reader.convert_to_netcdf(brams_data, 'brams_output.nc')
+# Ac # Acccess speci ess speciffic v ic var ariables iables
+temperature = dataset['THETA']
+precipitation = dataset['PCPG']
+wind_u = dataset['UP']
+wind_v = dataset['VP']
+# Calculat # Calculate der e derivived v ed var ariables iables
+wind_speed = np.sqrt(wind_u**2 + wind_v**2)
+CPTEC Precipitation Data
+LatAm Dataset Format
+Data Structure:
+python
+LLAATTAM_D AM_DAATTASET_STRUCTURE ASET_STRUCTURE = {
+ 'file_format': 'NetCDF-4',
+ 'spatial_coverage': {
+ 'north': 32.0,
+ 'south': --60.0,
+ 'east': --30.0,
+ 'west': --120.0
+ },
+ 'spatial_resolution': 0.25, # degrees
+ 'temporal_resolution': 'daily',
+ 'temporal_coverage': '2000-03-01 to present',
+ 'variables': {
+ 'precipitation': {
+ 'name': 'precip',
+ 'long_name': 'Total Precipitation',
+ 'units': 'mm/day',
+ 'missing_value': --999.0,
+ 'valid_range': [0.0, 500.0]
+ },
+ 'temperature': {
+ 'name': 'temp',
+ 'long_name': 'Air Temperature',
+ 'units': 'degrees_C',
+ 'missing_value': --999.0,
+ 'valid_range': [--50.0, 50.0]
+ }
+ }
+}
+def access_cptec_data(ftp_path, date_range):
+ """Access CPTEC LatAm dataset via FTP"""
+ import ftplib
+ import xarray as xr
+ from datetime import datetime, timedelta
+
+ ftp_server = 'ftp.cptec.inpe.br'
+ ftp_path = '/rainfall/cif.latam/output_americas/datasets/'
+
+ try:
+ # C # Connect t onnect to F o FTP s TP ser ervver er
+ ftp = ftplib.FTP(ftp_server)
+ ftp.login() # Anonymous login
+ ftp.cwd(ftp_path)
+
+ # List available files
+ file_list = ftp.nlst()
+
+ # Filt # Filter f er files b iles by dat y date r e range ange
+ start_date, end_date = date_range
+ relevant_files = []
+
+ for filename in file_list:
+ if filename.endswith('.nc'):
+ # Extr # Extract dat act date fr e from f om filename (for ilename (format: YYYY-MM-DD) mat: YYYY-MM-DD)
+ try:
+ file_date_str = filename.split('_')[1] # Assuming format: precip_YYYY-MM-DD.nc
+ file_date = datetime.strptime(file_date_str, '%Y-%m-%d')
+
+ if start_date <= file_date <= end_date:
+ relevant_files.append(filename)
+ except:
+ continue
+
+ ftp.quit()
+
+ # Do # Downlo wnload and pr ad and prococess f ess files iles
+ datasets = []
+ for filename in relevant_files:
+ # Download file
+ local_file = f"/tmp/{filename}"
+ with open(local_file, 'wb') as f:
+ ftp.retrbinary(f'RETR {filename}', f.write)
+
+ # Load with xarray
+ ds = xr.open_dataset(local_file)
+ datasets.append(ds)
+
+ # Combine datasets
+ if datasets:
+ combined_ds = xr.concat(datasets, dim='time')
+ return combined_ds
+ else:
+ return None
+
+ except Exception as e:
+ print(f"Error accessing CPTEC data: {e}")
+ return None
+Data Access APIs and Protocols
+OPeNDAP Protocol
+URL Structure and Parameters
+OPeNDAP URL Format:
+Constraint Expression Syntax:
+# Usage
+from datetime import datetime
+start_date = datetime(2023, 1, 1)
+end_date = datetime(2023, 1, 31)
+cptec_data = access_cptec_data('/rainfall/cif.latam/', (start_date, end_date))
+if cptec_data:
+ print(f"CPTEC data shape: {cptec_data.dims}")
+ print(f"Variables: {list(cptec_data.data_vars)}")
+https://[server]/opendap/[path]/[filename].[extension]?[constraint_expression]
+Example:
+https://acdisc.gesdisc.eosdis.nasa.gov/opendap/HDF-EOS5/Aura_MLS_Level2/ML2T.004/2023/001/MLSAura_L2GP-Temperature_v04-23-c03_2023d001.he5?Temperature[0:1:100][0:1:50][0:1:100]
+python
+Authentication and Session Management
+Earthdata Login Integration:
+ 
+# B # Basic s asic synt yntax: v ax: var ariable[st iable[star art:str t:stride:st ide:stop] op]
+CONSTRAINT_EXAMPLES = {
+ 'temporal_subset': 'time[0:1:100]', # First 101 time steps
+ 'spatial_subset': 'latitude[10:1:20],longitude[30:1:40]', # Lat/lon ranges
+ 'level_subset': 'pressure[0:1:10]', # First 11 pressure levels
+ 'variable_subset': 'temperature,humidity', # Specific variables only
+ 'combined': 'temperature[0:1:10][20:1:30][40:1:50]' # 3D subset: time, lat, lon
+}
+def build_opendap_url(base_url, constraints):
+ """Build OPeNDAP URL with constraints"""
+ if not constraints:
+ return base_url
+
+ constraint_string = ','.join(constraints)
+ return f"{base_url}?{constraint_string}"
+# Usage
+base_url = "https://acdisc.gesdisc.eosdis.nasa.gov/opendap/MERRA2/M2T1NXSLV.5.12.4/2023/01/MERRA2_400.tav
+constraints = [
+ "T2M[0:1:23]", # All 24 hours
+ "lat[144:1:144]", # Specific latitude index
+ "lon[288:1:288]" # Specific longitude index
+]
+opendap_url = build_opendap_url(base_url, constraints)
+print(f"OPeNDAP URL: {opendap_url}")
+python
+import requests
+from requests.auth import HTTPBasicAuth
+import netrc
+import os
+class OPeNDAPClient:
+ def __init__(self, username=None, password=None):
+ self.session = requests.Session()
+ self.setup_authentication(username, password)
+
+ def setup_authentication(self, username, password):
+ """Setup authentication for NASA Earthdata"""
+ if username and password:
+ self.username = username
+ self.password = password
+ else:
+ # T # Trry t y to get cr o get credentials fr edentials from .netr om .netrc f c fileile
+ try:
+ netrc_file = netrc.netrc()
+ auth_info = netrc_file.authenticators('urs.earthdata.nasa.gov')
+ if auth_info:
+ self.username = auth_info[0]
+ self.password = auth_info[2]
+ else:
+ raise Exception("No credentials found")
+ except:
+ raise Exception("Please provide username/password or setup .netrc file")
+
+ # Setup session authentication
+ self.session.auth = HTTPBasicAuth(self.username, self.password)
+
+ # Follow redirects and handle cookies
+ self.session.cookies.clear()
+
+ def access_opendap_data(self, url):
+ """Access OPeNDAP data with authentication"""
+ try:
+ # Make initial request
+ response = self.session.get(url, allow_redirects=True)
+
+ if response.status_code == 200:
+ return response.content
+ else:
+REST APIs and Data Services
+Common Metadata Repository (CMR) API
+Search Collections:
+ print(f"Request failed with status code: {response.status_code}")
+ print(f"Response text: {response.text}")
+ return None
+
+ except Exception as e:
+ print(f"Error accessing OPeNDAP data: {e}")
+ return None
+
+ def stream_to_xarray(self, opendap_url):
+ """Stream OPeNDAP data directly to xarray"""
+ import xarray as xr
+
+ try:
+ # Us # Use x e xarr arrayay''s built s built-in OP -in OPeND eNDAP suppor AP support with authentication t with authentication
+ ds = xr.open_dataset(opendap_url,
+ chunks={'time': 10}, # Enable dask for large datasets
+ auth=self.session.auth)
+ return ds
+ except Exception as e:
+ print(f"Error streaming to xarray: {e}")
+ return None
+# Usage
+client = OPeNDAPClient('your_username', 'your_password')
+# S # Strtream dat eam data dir a directly t ectly to x o xarr arrayay
+opendap_url = "https://acdisc.gesdisc.eosdis.nasa.gov/opendap/MERRA2/M2T1NXSLV.5.12.4/2023/01/MERRA2_40
+dataset = client.stream_to_xarray(opendap_url)
+if dataset:
+ print(f"Dataset variables: {list(dataset.data_vars)}")
+ print(f"Dataset dimensions: {dataset.dims}")
+
+ # Access subset
+ subset = dataset.sel(lat=slice(25, 50), lon=slice(--125, --65))
+ temperature = subset['T2M']
+python
+import requests
+import json
+class CMRClient:
+ def __init__(self):
+ self.base_url = 'https://cmr.earthdata.nasa.gov/search'
+ self.headers = {'Accept': 'application/json'}
+
+ def search_collections(self, **kwargs):
+ """Search for data collections"""
+ url = f"{self.base_url}/collections"
+
+ params = {
+ 'page_size': kwargs.get('page_size', 20),
+ 'sort_key[]': kwargs.get('sort_key', 'score')
+ }
+
+ # Add s # Add sear earch p ch par aramet ameter erss
+ if 'keyword' in kwargs:
+ params['keyword'] = kwargs['keyword']
+ if 'instrument' in kwargs:
+ params['instrument'] = kwargs['instrument']
+ if 'platform' in kwargs:
+ params['platform'] = kwargs['platform']
+ if 'processing_level' in kwargs:
+ params['processing_level_id'] = kwargs['processing_level']
+ if 'provider' in kwargs:
+ params['provider'] = kwargs['provider']
+ if 'temporal' in kwargs:
+ params['temporal'] = kwargs['temporal']
+ if 'bounding_box' in kwargs:
+ # Format: [west, south, east, north]
+ bbox = kwargs['bounding_box']
+ params['bounding_box'] = f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}"
+
+ response = requests.get(url, params=params, headers=self.headers)
+
+ if response.status_code == 200:
+ return response.json()
+ else:
+ print(f"Search failed: {response.status_code}")
+ return None
+
+ def search_granules(self, collection_concept_id, **kwargs):
+ """Search for data granules within a collection"""
+ url = f"{self.base_url}/granules"
+
+ params = {
+ 'collection_concept_id': collection_concept_id,
+ 'page_size': kwargs.get('page_size', 20)
+ }
+
+ # Add t # Add tempor emporal and sp al and spatial f atial filt ilter erss
+ if 'temporal' in kwargs:
+ params['temporal'] = kwargs['temporal']
+ if 'bounding_box' in kwargs:
+ bbox = kwargs['bounding_box']
+ params['bounding_box'] = f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}"
+
+ response = requests.get(url, params=params, headers=self.headers)
+
+ if response.status_code == 200:
+ return response.json()
+ else:
+ print(f"Granule search failed: {response.status_code}")
+ return None
+
+ def get_download_urls(self, granule_results):
+ """Extract download URLs from granule search results"""
+ download_urls = []
+
+ for granule in granule_results.get('feed', {}).get('entry', []):
+ for link in granule.get('links', []):
+ if link.get('rel') == 'http://esipfed.org/ns/fedsearch/1.1/data#':
+ download_urls.append({
+ 'url': link['href'],
+ 'title': granule.get('title', 'Unknown'),
+ 'size': link.get('length', 'Unknown')
+ })
+
+ return download_urls
+# Usage example
+cmr = CMRClient()
+# Search for MODIS collections
+collections = cmr.search_collections(
+Format Conversion and Processing
+Universal Data Processing Pipeline
+ keyword='MODIS',
+ instrument='MODIS',
+ platform='Terra',
+ processing_level='2',
+ provider='LAADS'
+)
+if collections:
+ for collection in collections['feed']['entry'][:3]:
+ print(f"Collection: {collection['title']}")
+ print(f"Short name: {collection.get('short_name', 'N/A')}")
+ print(f"Concept ID: {collection['id']}")
+ print("---")
+# Search for granules
+if collections and collections['feed']['entry']:
+ first_collection_id = collections['feed']['entry'][0]['id']
+
+ granules = cmr.search_granules(
+ first_collection_id,
+ temporal='2023-01-01T00:00:00Z,2023-01-07T23:59:59Z',
+ bounding_box=[--120, 35, --110, 45] # Western US
+ )
+
+ if granules:
+ download_urls = cmr.get_download_urls(granules)
+ for url_info in download_urls[:3]:
+ print(f"File: {url_info['title']}")
+ print(f"URL: {url_info['url']}")
+ print(f"Size: {url_info['size']}")
+ print("---")
+python
+import xarray as xr
+import pandas as pd
+import numpy as np
+from pathlib import Path
+import logging
+class UniversalDataProcessor:
+ def __init__(self):
+ self.supported_formats = {
+ 'netcdf': ['.nc', '.nc4', '.netcdf'],
+ 'hdf': ['.hdf', '.h4', '.hdf4'],
+ 'hdf5': ['.h5', '.hdf5', '.he5'],
+ 'grib': ['.grb', '.grib', '.grib2'],
+ 'geotiff': ['.tif', '.tiff'],
+ 'csv': ['.csv'],
+ 'json': ['.json'],
+ 'ascii': ['.txt', '.asc', '.dat']
+ }
+
+ self.setup_logging()
+
+ def setup_logging(self):
+ """Setup logging for data processing"""
+ logging.basicConfig(
+ level=logging.INFO,
+ format='%(asctime)s - %(levelname)s - %(message)s'
+ )
+ self.logger = logging.getLogger(__name__)
+
+ def detect_format(self, filepath):
+ """Detect data format from file extension"""
+ filepath = Path(filepath)
+ extension = filepath.suffix.lower()
+
+ for format_name, extensions in self.supported_formats.items():
+ if extension in extensions:
+ return format_name
+
+ return 'unknown'
+
+ def load_data(self, filepath, **kwargs):
+ """Universal data loader"""
+ format_type = self.detect_format(filepath)
+
+ self.logger.info(f"Loading {format_type} file: {filepath}")
+
+ try:
+ if format_type == 'netcdf':
+ return self.load_netcdf(filepath, **kwargs)
+ elif format_type in ['hdf', 'hdf5']:
+ return self.load_hdf(filepath, **kwargs)
+ elif format_type == 'grib':
+ return self.load_grib(filepath, **kwargs)
+ elif format_type == 'geotiff':
+ return self.load_geotiff(filepath, **kwargs)
+ elif format_type == 'csv':
+ return self.load_csv(filepath, **kwargs)
+ elif format_type == 'json':
+ return self.load_json(filepath, **kwargs)
+ elif format_type == 'ascii':
+ return self.load_ascii(filepath, **kwargs)
+ else:
+ raise ValueError(f"Unsupported format: {format_type}")
+
+ except Exception as e:
+ self.logger.error(f"Error loading {filepath}: {e}")
+ raise
+
+ def load_netcdf(self, filepath, **kwargs):
+ """Load NetCDF files"""
+ chunks = kwargs.get('chunks', None)
+ decode_times = kwargs.get('decode_times', True)
+
+ ds = xr.open_dataset(filepath, chunks=chunks, decode_times=decode_times)
+
+ # S # Sttandar andardize c dize coor oordinat dinate names e names
+ ds = self.standardize_coordinates(ds)
+
+ return ds
+
+ def load_hdf(self, filepath, **kwargs):
+ """Load HDF files (HDF4 and HDF5)"""
+ import h5py
+ from pyhdf.SD import SD, SDC
+
+ filepath = str(filepath)
+
+ # Try HDF5 first
+ try:
+ # Us # Use x e xarr arrayay''s HDF5 suppor s HDF5 support via h5net t via h5netcdf cdf
+ ds = xr.open_dataset(filepath, engine='h5netcdf')
+ return self.standardize_coordinates(ds)
+ except:
+ pass
+
+ # Try HDF4
+ try:
+ hdf = SD(filepath, SDC.READ)
+ datasets = hdf.datasets()
+
+ data_vars = {}
+ coords = {}
+
+ for dataset_name, info in datasets.items():
+ sds = hdf.select(dataset_name)
+ data = sds.get()
+ attrs = sds.attributes()
+
+ # Apply scaling
+ scale_factor = attrs.get('scale_factor', 1.0)
+ add_offset = attrs.get('add_offset', 0.0)
+
+ if scale_factor != 1.0 or add_offset != 0.0:
+ data = data * scale_factor + add_offset
+
+ # Det # Deter ermine i mine if this is a c f this is a coor oordinat dinate or dat e or data v a var ariable iable
+ if dataset_name.lower() in ['longitude', 'latitude', 'time', 'lat', 'lon']:
+ coords[dataset_name] = data
+ else:
+ data_vars[dataset_name] = (['y', 'x'], data)
+
+ sds.endaccess()
+
+ hdf.end()
+
+ # Cr # Creat eate x e xarr array dat ay datas aset et
+ ds = xr.Dataset(data_vars, coords=coords)
+ return self.standardize_coordinates(ds)
+
+ except Exception as e:
+ self.logger.error(f"Could not load HDF file: {e}")
+ raise
+
+ def load_grib(self, filepath, **kwargs):
+ """Load GRIB files"""
+ try:
+ # T # Trry x y xarr array with cfgr ay with cfgrib engine ib engine
+ ds = xr.open_dataset(filepath, engine='cfgrib')
+ return self.standardize_coordinates(ds)
+ except:
+ # F # Fallb allback t ack to p o pyygr gribib
+ import pygrib
+
+ grbs = pygrib.open(str(filepath))
+
+ # R # Read f ead firirst mess st message t age to get gr o get grid info id info
+ first_msg = grbs.read(1)[0]
+ data, lats, lons = first_msg.data()
+
+ # Cr # Creat eate c e coor oordinat dinate arr e arrays ays
+ if lons.ndim == 2:
+ # Us # Use c e cent enter points for 1D c er points for 1D coor oordinat dinateses
+ lons_1d = lons[0, :]
+ lats_1d = lats[:, 0]
+ else:
+ lons_1d = lons
+ lats_1d = lats
+
+ grbs.rewind()
+
+ data_vars = {}
+ times = []
+
+ for grb in grbs:
+ var_name = grb.parameterName.replace(' ', '_').lower()
+ data, _, _ = grb.data()
+
+ data_vars[var_name] = (['lat', 'lon'], data)
+ times.append(grb.validDate)
+
+ coords = {
+ 'lon': lons_1d,
+ 'lat': lats_1d
+ }
+
+ if len(set(times)) > 1:
+ coords['time'] = sorted(set(times))
+ # R # Reshape dat eshape data v a var ariables t iables to include time dimension o include time dimension
+ # This would need more complex logic for multiple times
+
+ ds = xr.Dataset(data_vars, coords=coords)
+ grbs.close()
+
+ return self.standardize_coordinates(ds)
+
+ def load_geotiff(self, filepath, **kwargs):
+ """Load GeoTIFF files"""
+ import rasterio
+ import rasterio.features
+ import rasterio.warp
+
+ with rasterio.open(filepath) as src:
+ # Read data
+ data = src.read()
+
+ # Get spatial coordinates
+ transform = src.transform
+ width, height = src.width, src.height
+
+ # Cr # Creat eate c e coor oordinat dinate arr e arrays ays
+ cols, rows = np.meshgrid(np.arange(width), np.arange(height))
+ xs, ys = rasterio.transform.xy(transform, rows, cols)
+
+ lons = np.array(xs)
+ lats = np.array(ys)
+
+ # Cr # Creat eate x e xarr array dat ay datas aset et
+ if data.shape[0] == 1:
+ # Single band
+ data_vars = {'band_1': (['y', 'x'], data[0])}
+ else:
+ # Multiple bands
+ data_vars = {}
+ for i in range(data.shape[0]):
+ data_vars[f'band_{i+1}'] = (['y', 'x'], data[i])
+
+ coords = {
+ 'x': np.arange(width),
+ 'y': np.arange(height),
+ 'lon': (['y', 'x'], lons),
+ 'lat': (['y', 'x'], lats)
+ }
+
+ ds = xr.Dataset(data_vars, coords=coords)
+
+ # Add CRS information
+ ds.attrs['crs'] = src.crs.to_string()
+ ds.attrs['transform'] = src.transform
+
+ return ds
+
+ def load_csv(self, filepath, **kwargs):
+ """Load CSV files"""
+ # T # Trry t y to det o detect i ect if it' f it's a NASA-st s a NASA-standar andard CSV d CSV
+ with open(filepath, 'r') as f:
+ first_lines = [f.readline() for _ in range(10)]
+
+ # Check for header comments
+ skip_rows = 0
+ for line in first_lines:
+ if line.startswith('#'):
+ skip_rows += 1
+ else:
+ break
+
+ df = pd.read_csv(filepath, skiprows=skip_rows, **kwargs)
+
+ # C # Cononvver ert t t to x o xarr array i ay if it has c f it has coor oordinat dinate c e columns olumns
+ coord_columns = ['longitude', 'latitude', 'time', 'lon', 'lat']
+ coord_cols_present = [col for col in coord_columns if col in df.columns]
+
+ if coord_cols_present:
+ # Set coordinate columns as index
+ ds = df.set_index(coord_cols_present).to_xarray()
+ return self.standardize_coordinates(ds)
+ else:
+ # R # Retur eturn as p n as pandas Dat andas DataFr aFrame wr ame wrapped in x apped in xarr arrayay
+ return xr.Dataset.from_dataframe(df)
+
+ def load_json(self, filepath, **kwargs):
+ """Load JSON files"""
+ with open(filepath, 'r') as f:
+ data = json.load(f)
+
+ # C # Cononvver ert t t to p o pandas Dat andas DataFr aFrame i ame if it' f it's t s tabular dat abular dataa
+ if isinstance(data, list) and all(isinstance(item, dict) for item in data):
+ df = pd.DataFrame(data)
+ return xr.Dataset.from_dataframe(df)
+ elif isinstance(data, dict) and 'data' in data:
+ # Handle structured JSON with metadata
+ if isinstance(data['data'], list):
+ df = pd.DataFrame(data['data'])
+ ds = xr.Dataset.from_dataframe(df)
+
+ # Add metadata as attributes
+ if 'metadata' in data:
+ ds.attrs.update(data['metadata'])
+
+ return ds
+
+ # R # Retur eturn as-is i n as-is if can f can''t c t cononvver ert t t to x o xarr arrayay
+ return data
+
+ def load_ascii(self, filepath, **kwargs):
+ """Load ASCII files"""
+ # Us # Use the ASCII pr e the ASCII prococess essor fr or from earlier om earlier
+ processor = ASCIIDataProcessor()
+ df, metadata = processor.parse_ascii_file(filepath)
+
+ # C # Cononvver ert t t to x o xarr arrayay
+ ds = xr.Dataset.from_dataframe(df)
+ ds.attrs.update(metadata)
+
+ return self.standardize_coordinates(ds)
+
+ def standardize_coordinates(self, ds):
+ """Standardize coordinate names"""
+ # Common coordinate name mappings
+ coord_mappings = {
+ 'longitude': 'lon',
+ 'Longitude': 'lon',
+ 'LONGITUDE': 'lon',
+ 'latitude': 'lat',
+ 'Latitude': 'lat',
+ 'LATITUDE': 'lat',
+ 'time': 'time',
+ 'Time': 'time',
+ 'TIME': 'time'
+ }
+
+ # Rename coordinates
+ for old_name, new_name in coord_mappings.items():
+ if old_name in ds.coords and old_
+
+
+
+Complete Guide to NASA Earth Observation Data Tools and
+Resources
+Table of Contents
+1. Introduction
+2. GES DISC OPeNDAP Server (Hyrax)
+3. Giovanni - Geospatial Interactive Online Visualization
+4. Data Rods for Hydrology
+5. NASA Worldview
+6. Earthdata Search
+7. Data Access Tutorials
+8. CPTEC-INPE Brazil Partnership
+9. Implementation Strategies
+10. Best Practices and Integration
+Introduction
+This comprehensive guide covers all the major NASA Earth observation data tools and resources
+available for the 2025 NASA Space Apps Challenge "Will It Rain On My Parade?" These tools provide
+access to decades of global weather data, enabling developers to create sophisticated applications for
+weather probability analysis and forecasting.
+Key Challenge Requirements
+Objective: Build an app that tells users the likelihood of adverse weather conditions for specific
+locations and times
+Target Conditions: "Very hot," "very cold," "very windy," "very wet," or "very uncomfortable"
+weather
+Data Scope: Historical weather data rather than predictive models
+Output Requirements: Probability-based analysis with visualization capabilities
+GES DISC OPeNDAP Server (Hyrax)
+Overview
+The Goddard Earth Sciences Data and Information Services Center (GES DISC) OPeNDAP server,
+known as Hyrax, is a high-performance data server that provides access to NASA's Earth science data
+collections through web-based protocols.
+Technical Architecture
+Server Components:
+OLFS (OPeNDAP Lightweight Front-end Server): Java servlet that handles web requests
+BES (Back-End Server): High-performance server software that reads data from storage
+Protocol Support: DAP2, DAP4, and various web services
+Key Features
+Data Access Capabilities
+Multi-format Support: NetCDF, HDF-EOS, GRIB, and other scientific data formats
+Subsetting: Spatial, temporal, and variable-specific data extraction
+Protocol Flexibility: HTTP, OPeNDAP, and RESTful API access
+Real-time Processing: Server-side functions for data transformation
+Advanced Functionalities
+Geogrid Function: Subset gridded data using latitude and longitude values
+Grid Function: Subset any DAP Grid object using map vector values
+Linear Scale Function: Apply linear equations to returned data with automatic CF attribute use
+Version Function: List available server-side processing functions
+Authentication and Access
+Prerequisites
+1. Earthdata Login Account: Required for all GES DISC data access
+2. URS Authentication: Unified Registration System setup
+3. Cookie Configuration: Proper session management for automated access
+Setup Process
+Python Access Example
+Available Datasets
+Atmospheric Data
+MERRA-2: Modern-Era Retrospective Analysis for Research and Applications
+AIRS: Atmospheric Infrared Sounder data
+MLS: Microwave Limb Sounder atmospheric profiles
+GEOS: Goddard Earth Observing System model outputs
+Precipitation Data
+GPM: Global Precipitation Measurement mission data
+TRMM: Tropical Rainfall Measuring Mission (legacy)
+IMERG: Integrated Multi-satellitE Retrievals for GPM
+Performance Optimization
+Caching Mechanisms
+Pushed Aggregations: Data providers can aggregate files into large virtual datasets
+Pulled Aggregation: On-demand data assembly from distributed sources
+bash
+# C # Cookie f ookie files needed in home dir iles needed in home direct ector oryy
+~/.urs_cookies # Session cookies
+~/.netrc # Credentials
+~/.dodsrc # OP # OPeND eNDAP c AP conf onfigur iguration ation
+python
+from pydap.client import open_url
+from pydap.cas.urs import setup_session
+# Setup session with credentials
+session = setup_session('username', 'password', check_url=url)
+# Access data
+url = 'https://acdisc.gesdisc.eosdis.nasa.gov/opendap/HDF-EOS5/...'
+dataset = open_url(url, session=session)
+Local Caching: Improved performance for repeated queries
+Best Practices
+Use specific spatial and temporal bounds to reduce data volume
+Leverage server-side functions instead of downloading full datasets
+Implement proper session management for automated workflows
+Cache frequently accessed data locally when possible
+Giovanni - Geospatial Interactive Online Visualization
+Overview
+Giovanni (Geospatial Interactive Online Visualization ANd aNalysis Infrastructure) is a web-based
+application that provides intuitive access to NASA Earth science data without requiring data
+downloads.
+Core Capabilities
+Visualization Types
+Time-Averaged Maps: Create maps averaged over specified time periods
+Time Series Plots: Generate temporal analysis for specific locations or regions
+Vertical Profiles: Analyze atmospheric data at different altitudes
+Comparison Plots: Side-by-side analysis of different variables or time periods
+Animation: Create temporal animations of data evolution
+Analysis Functions
+Difference Maps: Compare two time periods or datasets
+Correlation Maps: Identify spatial relationships between variables
+Scatter Plots: X-Y analysis for area-averaged or time-averaged data
+Zonal Means: Analyze data along latitude bands
+Histogram Distributions: Statistical analysis of data distributions
+Advanced Features
+Data Handling
+Gap Management: Continues processing when data gaps are encountered
+Quality Control: Automatic handling of missing or invalid data
+Multi-Resolution: Handles datasets with different spatial and temporal resolutions
+Regridding: Automatic spatial interpolation when needed
+Geographic Tools
+Shapefile Support: Country, state, and watershed boundaries
+Land-Sea Masking: Separate analysis for land and ocean areas
+Custom Regions: User-defined geographic boundaries
+Coordinate Systems: Multiple projection support
+Data Processing Workflow
+Input Requirements
+1. Variable Selection: Choose from available atmospheric, oceanic, or land parameters
+2. Spatial Domain: Define geographic area of interest
+3. Temporal Range: Specify time period for analysis
+4. Processing Type: Select visualization or analysis method
+Output Options
+Image Formats: PNG, GeoTIFF, KMZ for different applications
+Data Formats: NetCDF files with complete metadata
+Interactive Features: Zoom, pan, and data exploration tools
+Download Capabilities: Both visualizations and underlying data
+Supported Datasets
+Atmospheric Variables
+Temperature: Surface and atmospheric temperature data
+Precipitation: Rainfall and snowfall measurements
+Wind: Speed and direction at various levels
+Humidity: Relative and specific humidity
+Pressure: Sea level and atmospheric pressure
+Aerosols: Dust, smoke, and pollution data
+Land Variables
+Vegetation: NDVI and vegetation indices
+Soil Moisture: Surface and root zone moisture
+Evapotranspiration: Water cycle analysis
+Land Cover: Surface type classification
+Integration Capabilities
+API Access
+RESTful Services: Programmatic access to Giovanni functions
+Batch Processing: Automated analysis workflows
+Custom Applications: Integration with external tools
+Data Streaming: Real-time data access
+Interoperability
+GIS Integration: Compatible with ArcGIS, QGIS, and other GIS software
+Programming Languages: Python, R, IDL, and MATLAB support
+Cloud Computing: Compatible with cloud-based analysis platforms
+Standards Compliance: OGC and ISO standards support
+Data Rods for Hydrology
+Concept and Architecture
+Data Rods represent a revolutionary approach to accessing time-series data from large Earth science
+datasets. Instead of downloading entire files covering large geographic areas, Data Rods extract timeseries data for specific point locations.
+Technical Implementation
+Data Rod Creation Process
+1. Data Stacking: Sequential arrangement of data files by time
+2. Spatial Indexing: Geographic coordinate mapping
+3. Temporal Sequencing: Chronological data organization
+4. Point Extraction: Location-specific time-series generation
+Available Datasets
+NLDAS (North American Land Data Assimilation System): 1979-present
+GLDAS (Global Land Data Assimilation System): 2000-present
+IMERG: High-resolution precipitation data with 100,000+ time stamps
+API Structure and Usage
+Service Parameters
+variable: Specific hydrological parameter
+location: Latitude and longitude coordinates
+startDate: Beginning of time series (optional)
+endDate: End of time series (optional)
+type: Output format (plot, ASCII, netCDF)
+Sample API Call
+Hydrological Variables
+Surface Water
+Precipitation: Total, rate, and accumulation
+Evapotranspiration: Actual and potential rates
+Runoff: Surface and subsurface flow
+Snow: Depth, water equivalent, and melt rates
+Soil Conditions
+Soil Moisture: Multiple depth layers (0-10cm, 10-40cm, 40-100cm, 100-200cm)
+Soil Temperature: Thermal conditions at various depths
+Infiltration: Water penetration rates
+Groundwater: Storage and flow patterns
+Energy Balance
+https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/OTF/HTTP_services.cgi?
+FILENAME=/data/NLD FILENAME=/data/NLDAS/NLD AS/NLDAS_NO AS_NOAH0125_H.002/2020/001/NLD AH0125_H.002/2020/001/NLDAS_NO AS_NOAH0125_H.A20200101.0000.002.grb& AH0125_H.A20200101.0000.002.grb&
+SERVICE=SUBSET_NLD SERVICE=SUBSET_NLDAS&VERSION=1.02&D AS&VERSION=1.02&DAATTASET=NLD ASET=NLDAS_NO AS_NOAH0125_H.002& AH0125_H.002&
+VARIABLES=APCPSFC&WEST=-104.0&EAST=-104.0&SOUTH=40.0&NORTH=40.0&
+STSTARARTDTDAATE=2020-01-01T00:00&ENDD TE=2020-01-01T00:00&ENDDAATE=2020-01-31T23:59&FORMA TE=2020-01-31T23:59&FORMAT=bmM0L T=bmM0Lww
+Radiation: Incoming and outgoing components
+Heat Flux: Sensible and latent heat transfer
+Temperature: Air and surface temperature
+Wind: Speed and direction effects on evaporation
+Python Integration
+Using earthaccess Library
+Performance Advantages
+Traditional Approach vs Data Rods
+Traditional: Download 8,760 files for one year of hourly data
+Data Rods: Single API call returns complete time series
+Speed Improvement: 100x faster for point location analysis
+Bandwidth Savings: 99% reduction in data transfer
+Storage Efficiency: No local file management needed
+python
+import earthaccess
+import requests
+import pandas as pd
+# Authenticate
+auth = earthaccess.login()
+# Def # Define p ine par aramet ameter erss
+params = {
+ 'variable': 'PrecipTotal',
+ 'location': '40.0,-104.0',
+ 'startDate': '2020-01-01',
+ 'endDate': '2020-12-31',
+ 'type': 'ascii'
+}
+# Make request
+response = requests.get(api_url, params=params)
+data = pd.read_csv(io.StringIO(response.text))
+NASA Worldview
+Overview
+NASA Worldview is an interactive web application that provides access to over 1,200 global, fullresolution satellite imagery layers with near real-time availability.
+Core Features
+Imagery Access
+Near Real-Time: Data available within 3 hours of satellite observation
+Historical Archive: Some layers span almost 30 years
+Global Coverage: Complete Earth observation capability
+High Resolution: Full satellite resolution maintained
+Multi-Spectral: Various band combinations and false-color composites
+Interactive Tools
+Layer Management: Add, remove, and adjust transparency of multiple layers
+Temporal Navigation: Date selection and animation capabilities
+Spatial Tools: Zoom, pan, and coordinate display
+Measurement Tools: Distance and area calculation
+Download Options: Image export and data access
+Available Imagery Layers
+Land Surface
+True Color: Natural appearance RGB composites
+False Color: Enhanced feature visualization
+NDVI: Vegetation health and density
+Land Surface Temperature: Thermal infrared data
+Land Cover: Surface type classification
+Atmospheric Data
+Aerosol Optical Depth: Air quality and pollution
+Cloud Properties: Coverage, type, and optical characteristics
+Water Vapor: Atmospheric moisture content
+Atmospheric Profiles: Temperature and humidity
+Ocean Data
+Sea Surface Temperature: Ocean thermal conditions
+Chlorophyll Concentration: Ocean productivity
+Sea Ice: Coverage and concentration
+Ocean Color: Water quality indicators
+Natural Hazards
+Active Fires: Real-time fire detection
+Smoke Plumes: Wildfire impact assessment
+Dust Storms: Atmospheric dust events
+Volcanic Ash: Eruption monitoring
+Advanced Capabilities
+Animation Features
+Temporal Loops: Create animations showing data evolution
+Custom Speed: Adjustable playback rates
+Export Options: GIF and video format output
+Quality Control: High-resolution animation generation
+Comparison Tools
+Split Screen: Side-by-side layer comparison
+Swipe Tool: Interactive layer comparison
+Opacity Control: Overlay transparency adjustment
+Temporal Comparison: Before/after analysis
+Technical Infrastructure
+Backend Services
+GIBS (Global Imagery Browse Services): Tile-based imagery delivery
+OpenLayers: JavaScript mapping framework
+Web Map Tile Service (WMTS): Standard tile delivery protocol
+RESTful APIs: Programmatic access capabilities
+Performance Optimization
+Tile Caching: Pre-generated imagery tiles for fast loading
+Content Delivery Network: Global distribution for reduced latency
+Progressive Loading: Multi-resolution tile pyramid
+Browser Optimization: Efficient memory and bandwidth usage
+Integration Options
+Web Applications
+Embedding: Include Worldview in custom applications
+API Access: Programmatic layer and data access
+Custom Styling: Modify appearance and functionality
+Event Handling: Respond to user interactions
+GIS Software
+ArcGIS: Direct layer import and analysis
+QGIS: Open-source GIS integration
+Google Earth: KMZ export compatibility
+Custom Applications: GDAL and other library support
+Worldview Snapshots
+Lightweight Alternative
+Quick Access: Simplified interface for rapid image generation
+Preset Options: Common satellite imagery configurations
+Batch Processing: Multiple image generation
+Low Bandwidth: Optimized for limited connectivity
+Earthdata Search
+Architecture and Purpose
+Earthdata Search serves as NASA's gateway for discovery and access to Earth science data, providing
+sub-second searches through more than 119 petabytes of data archive.
+Search Capabilities
+Discovery Methods
+Keyword Search: Free-text search across metadata
+Spatial Search: Geographic boundary definition
+Temporal Search: Date range specification
+Variable Search: Specific parameter identification
+Mission Search: Satellite or instrument-based queries
+Advanced Filtering
+Processing Level: Raw, calibrated, or derived products
+Data Format: NetCDF, HDF, GRIB, and other formats
+Spatial Resolution: Grid size and coverage specifications
+Temporal Resolution: Measurement frequency
+Cloud Coverage: Quality metrics for optical data
+User Interface Components
+Search Panel (Left)
+Query Input: Text and parameter-based searching
+Filter Options: Narrow results by various criteria
+Collection Browser: Hierarchical data organization
+Saved Searches: Store and retrieve common queries
+Results Panel (Center)
+Collection List: Matching datasets with metadata
+Granule View: Individual file listings
+Sorting Options: Usage, relevance, or date-based ordering
+Quick Filters: Rapid result refinement
+Map Interface (Right)
+Geographic Selection: Boundary drawing tools
+Spatial Visualization: Data coverage display
+Coordinate Systems: Multiple projection support
+Layer Management: Background map options
+Data Access Methods
+Direct Download
+HTTP/HTTPS: Standard web-based download
+FTP: Bulk transfer protocol
+Granule Selection: Individual file download
+Bulk Download: Large dataset acquisition
+Customization Services
+Spatial Subsetting: Extract geographic regions
+Temporal Subsetting: Select time periods
+Variable Subsetting: Choose specific parameters
+Format Conversion: Transform between data formats
+Reprojection: Change coordinate systems
+Cloud Access
+AWS Integration: Direct cloud-based data access
+Harmony Services: Advanced data processing
+OPeNDAP Links: Server-side data access
+API Endpoints: Programmatic access methods
+Integration with Other Tools
+Seamless Connections
+Worldview: Visualization of search results
+Giovanni: Analysis of discovered data
+HTTPS Services: Direct data access
+Third-party Tools: GIS and analysis software integration
+Python Integration
+earthaccess Library
+Data Access Tutorials
+Overview
+NASA provides comprehensive Jupyter notebook tutorials covering all aspects of Earth science data
+access, from basic discovery to advanced analysis techniques.
+Tutorial Categories
+Basic Data Access
+Getting Started: Introduction to NASA data systems
+Authentication: Earthdata Login setup and usage
+Search Techniques: Finding relevant datasets
+Download Methods: Various data acquisition approaches
+Programming Languages
+Python: Most comprehensive tutorial collection
+R: Statistical analysis focus
+python
+import earthaccess
+# Authenticate
+auth = earthaccess.login()
+# Search for data
+results = earthaccess.search_data(
+ short_name="MOD11A1",
+ bounding_box=(--120, 35, --100, 45),
+ temporal=("2020-01-01", "2020-12-31"),
+ count=100
+)
+# Download data
+files = earthaccess.download(results, "./data")
+# Or stream data directly
+ds = earthaccess.open(results)
+MATLAB: Engineering and scientific computing
+IDL: Traditional remote sensing applications
+Advanced Topics
+Cloud Computing: AWS and cloud-native access
+Big Data: Handling large datasets efficiently
+Time Series Analysis: Temporal data processing
+Spatial Analysis: Geographic data manipulation
+Jupyter Notebook Structure
+Standard Components
+1. Environment Setup: Required libraries and authentication
+2. Data Discovery: Search and identification techniques
+3. Access Methods: Various data retrieval approaches
+4. Processing Examples: Common analysis workflows
+5. Visualization: Plotting and mapping techniques
+6. Best Practices: Optimization and efficiency tips
+Example Notebooks
+PACE Mission Tutorials
+OCI Data Access: Ocean Color Instrument data retrieval
+File Structure Analysis: Understanding data organization
+Level Processing: Different processing levels explanation
+Visualization Techniques: Plotting and mapping examples
+GEDI Mission Resources
+Lidar Data Processing: Forest structure analysis
+Spatial Queries: Geographic subset techniques
+Format Conversion: HDF5 to GeoJSON transformation
+Integration Examples: GIS software compatibility
+Atmospheric Data
+Air Quality Analysis: Pollution monitoring workflows
+Climate Studies: Long-term trend analysis
+Weather Forecasting: Meteorological data usage
+Satellite Validation: Ground-truth comparison
+Cloud Computing Integration
+2i2c Platform
+Jupyter Hub: Cloud-based notebook environment
+Pre-configured: NASA data access tools installed
+Collaborative: Shared workspace capabilities
+Scalable: High-performance computing resources
+Container Solutions
+Docker Images: Reproducible environments
+Binder: Temporary cloud execution
+Local Setup: Personal development environments
+HPC Integration: Supercomputer compatibility
+Installation and Setup
+Python Environment
+R Environment
+bash
+# Cr # Creat eate c e conda en onda envir vironment onment
+conda create -n nasa_data python=3.9
+conda activate nasa_data
+# Inst # Install r all requir equired p ed pack ackages ages
+conda install -c conda-forge earthaccess xarray matplotlib cartopy
+pip install pydap requests pandas netcdf4
+r
+Best Practices
+Performance Optimization
+Chunking: Process data in manageable pieces
+Parallel Processing: Use multiple cores when available
+Caching: Store intermediate results
+Memory Management: Efficient data handling
+Reproducibility
+Version Control: Track code changes
+Environment Documentation: Record dependencies
+Data Provenance: Document data sources
+Workflow Documentation: Explain processing steps
+CPTEC-INPE Brazil Partnership
+Organization Overview
+The Center for Weather Forecasting and Climate Studies (CPTEC) at Brazil's National Institute for
+Space Research (INPE) represents the most advanced center for numerical weather prediction and
+climate modeling in Latin America.
+Technical Capabilities
+Modeling Systems
+BAM (Brazilian Global Atmospheric Model): In-house developed global circulation model
+BRAMS (Brazilian Regional Atmospheric Modeling System): High-resolution regional forecasting
+CCATT-BRAMS: Coupled chemistry and aerosol transport modeling
+BESM (Brazilian Earth System Model): Comprehensive climate system modeling
+# Inst # Install r all requir equired p ed pack ackages ages
+install.packages(c("ncdf4", "raster", "sp", "rgdal", "ggplot2"))
+# NASA-specific packages
+devtools::install_github("nasa/earthaccess-r")
+Computational Infrastructure
+Tupã Supercomputer: 30,000 processors for high-resolution modeling
+Spatial Resolution: Capable of 10-20 km resolution forecasting
+Temporal Range: 1-7 day weather forecasts, seasonal climate predictions
+Real-time Operations: Continuous forecasting and monitoring
+Data Products and Services
+Weather Forecasting
+Short-term: 1-7 day high-precision forecasts
+Medium-term: Extended range predictions
+Seasonal: 3-month climate outlooks
+Long-term: Climate change projections
+Specialized Products
+Tropical Systems: Hurricane and typhoon tracking
+Severe Weather: Extreme event prediction
+Agricultural: Crop-specific weather information
+Hydrology: Watershed and flood forecasting
+Air Quality: Pollution and aerosol modeling
+Data Access and Distribution
+LatAm Dataset
+Geographic Coverage: Mexico to southern Argentina and Chile
+Temporal Range: March 2000 to present
+Data Sources: GTS networks, GHCN-Daily integration
+Quality Control: Comprehensive validation procedures
+Format Options: Multiple output formats for different applications
+FTP Access
+Primary: ftp://ftp.cptec.inpe.br/rainfall/cif.latam
+Mirror: http://iridl.ldeo.columbia.edu/SOURCES/.INPE/.CPTEC/.latam/.CoSch/
+BRAMS Modeling System
+Technical Specifications
+Base System: Regional Atmospheric Modeling System (RAMS)
+Enhancements: Tropical/subtropical optimization
+Coupling: Online chemistry and aerosol transport
+Resolution Range: Large eddy simulation to hemispheric scales
+License: Free software (CC-GPL)
+Input Data Requirements
+Topography: USGS global datasets at 30s resolution
+Land Use: Updated Amazonia data from PROVEG/INPE
+Sea Surface Temperature: NOAA OI.v2 weekly analysis
+Soil Data: UN FAO with INPE updates for Brazil
+Initial Conditions: Global model outputs
+Research Applications
+Climate Studies
+El Niño/La Niña: ENSO impact assessment
+Amazon Climate: Rainforest-atmosphere interactions
+Regional Climate: South American climate variability
+Climate Change: Regional downscaling studies
+Environmental Monitoring
+Deforestation: Forest cover change impacts
+Air Quality: Urban and regional pollution modeling
+Carbon Cycle: Greenhouse gas transport and sources
+Biomass Burning: Fire emissions and transport
+International Collaboration
+Data Sharing
+NASA Partnership: Joint research initiatives
+WMO Integration: Global data exchange participation
+Regional Networks: South American meteorological cooperation
+Academic Collaboration: University and research institute partnerships
+Technology Transfer
+Model Development: Shared code and improvements
+Training Programs: Capacity building initiatives
+Workshop Series: Knowledge dissemination
+Student Exchange: International research collaboration
+Implementation Strategies
+Application Architecture
+Frontend Development
+User Interface: Interactive map-based selection
+Visualization: Charts, graphs, and probability displays
+Responsiveness: Mobile and desktop compatibility
+Accessibility: Section 508 compliance
+Backend Infrastructure
+API Gateway: Centralized data access management
+Caching Layer: Improved performance and reduced latency
+Database: Metadata and user preference storage
+Processing Engine: Statistical analysis and probability calculation
+Data Integration
+Multi-source Access: Combine NASA and CPTEC data
+Real-time Updates: Automated data refresh
+Quality Control: Validation and error handling
+Format Standardization: Consistent data structures
+Technical Implementation
+Data Access Strategy
+python
+Statistical Analysis Framework
+# Multi-s # Multi-sour ourcce dat e data ac a acccess ex ess example ample
+import earthaccess
+import requests
+from datetime import datetime, timedelta
+class WeatherDataIntegrator:
+ def __init__(self):
+ self.nasa_auth = earthaccess.login()
+ self.data_sources = {
+ 'nasa_precipitation': 'GPM_3IMERGHH',
+ 'nasa_temperature': 'MERRA2_400',
+ 'cptec_regional': 'LatAm_dataset'
+ }
+
+ def get_historical_data(self, location, start_date, end_date):
+ """Retrieve historical weather data from multiple sources"""
+ results = {}
+
+ # NASA data access
+ for param, dataset in self.data_sources.items():
+ if 'nasa' in param:
+ data = earthaccess.search_data(
+ short_name=dataset,
+ bounding_box=self.point_to_bbox(location),
+ temporal=(start_date, end_date)
+ )
+ results[param] = earthaccess.open(data)
+
+ # CPTEC data access
+ cptec_data = self.access_cptec_data(location, start_date, end_date)
+ results['cptec_regional'] = cptec_data
+
+ return results
+
+ def calculate_probabilities(self, historical_data, target_date):
+ """Calculate probability of extreme conditions"""
+ # Implementation for statistical analysis
+ pass
+python
+import numpy as np
+import pandas as pd
+from scipy import stats
+class WeatherProbabilityCalculator:
+ def __init__(self):
+ self.thresholds = {
+ 'very_hot': 95, # 95th percentile
+ 'very_cold': 5, # 5th percentile
+ 'very_wet': 90, # 90th percentile
+ 'very_windy': 85, # 85th percentile
+ 'very_uncomfortable': 'composite' # Heat index + humidity
+ }
+
+ def analyze_historical_patterns(self, data, date_of_year):
+ """Analyze historical patterns for specific date"""
+ # Extr # Extract dat act data for s a for same dat ame date acr e across multiple y oss multiple year earss
+ same_date_data = self.extract_seasonal_data(data, date_of_year)
+
+ # Calculate statistical distributions
+ distributions = {}
+ for parameter in ['temperature', 'precipitation', 'wind_speed']:
+ distributions[parameter] = {
+ 'mean': np.mean(same_date_data[parameter]),
+ 'std': np.std(same_date_data[parameter]),
+ 'percentiles': np.percentile(same_date_data[parameter],
+ [5, 10, 25, 50, 75, 90, 95])
+ }
+
+ return distributions
+
+ def calculate_extreme_probabilities(self, distributions, current_conditions=None):
+ """Calculate probability of extreme conditions"""
+ probabilities = {}
+
+ for condition, threshold in self.thresholds.items():
+ if condition == 'very_hot':
+ prob = self.temperature_probability(distributions['temperature'],
+ threshold, 'above')
+ elif condition == 'very_cold':
+ prob = self.temperature_probability(distributions['temperature'],
+ threshold, 'below')
+ elif condition == 'very_wet':
+User Experience Design
+Interface Components
+1. Location Selection:
+Interactive map with pin dropping
+Address/coordinate input
+Preset location options
+2. Date Selection:
+Calendar widget
+Season/month selection
+Multi-year analysis options
+3. Condition Configuration:
+Customizable thresholds
+Parameter selection
+Weighting options
+4. Results Display:
+Probability charts
+Historical context
+Confidence intervals
+Download options
+Visualization Strategy
+ prob = self.precipitation_probability(distributions['precipitation'],
+ threshold)
+ # Add other condition calculations
+
+ probabilities[condition] = prob
+
+ return probabilities
+javascript
+Performance Optimization
+Caching Strategy
+Data Caching: Store frequently accessed historical data
+Computation Caching: Cache probability calculations
+CDN Integration: Global content delivery
+Browser Caching: Client-side optimization
+Scalability Considerations
+// D3.js visualization example
+class WeatherVisualization {
+ constructor(containerId) {
+ this.container = d3.select(`#${containerId}`);
+ this.margin = {top: 20, right: 30, bottom: 40, left: 40};
+ this.width = 800 -- this.margin.left -- this.margin.right;
+ this.height = 400 -- this.margin.top -- this.margin.bottom;
+ }
+
+ createProbabilityChart(data) {
+ // Create probability visualization
+ const svg = this.container.append('svg')
+ .attr('width', this.width + this.margin.left + this.margin.right)
+ .attr('height', this.height + this.margin.top + this.margin.bottom);
+
+ // Add pr // Add probobability b ability bar ars, c s, conf onfidenc idence int e inter ervvals, et als, etc. c.
+ this.addProbabilityBars(svg, data);
+ this.addConfidenceIntervals(svg, data);
+ this.addHistoricalContext(svg, data);
+ }
+
+ createTimeSeries(historicalData) {
+ // Time s // Time ser eries visualization for hist ies visualization for histor orical c ical cont ontext ext
+ // Implementation details...
+ }
+
+ createMapOverlay(geographicData) {
+ // Int // Inter eractiv active map with w e map with weather dat eather data o a ovverlay erlay
+ // Implementation details...
+ }
+}
+Microservices: Modular architecture
+Load Balancing: Distribute computational load
+Database Optimization: Efficient data storage and retrieval
+API Rate Limiting: Prevent abuse and ensure availability
+Best Practices and Integration
+Data Quality and Validation
+Quality Control Measures
+1. Source Validation: Verify data integrity from multiple sources
+2. Temporal Consistency: Check for reasonable temporal patterns
+3. Spatial Coherence: Validate geographic consistency
+4. Statistical Outliers: Identify and handle extreme values
+5. Missing Data: Implement appropriate interpolation methods
+Error Handling
+python
+class DataQualityManager:
+ def __init__(self):
+ self.quality_flags = ['good', 'questionable', 'bad', 'missing']
+ self.validation_rules = {
+ 'temperature': {'min': --100, 'max': 70}, # Celsius
+ 'precipitation': {'min': 0, 'max': 1000}, # mm/day
+ 'wind_speed': {'min': 0, 'max': 200} # m/s
+ }
+
+ def validate_data(self, data, parameter):
+ """Apply quality control rules"""
+ rules = self.validation_rules.get(parameter, {})
+
+ # Range checks
+ if 'min' in rules:
+ data = data.where(data >= rules['min'])
+ if 'max' in rules:
+ data = data.where(data <= rules['max'])
+
+ # Temporal consistency checks
+ data = self.check_temporal_consistency(data)
+
+ # Spatial consistency checks
+ data = self.check_spatial_consistency(data)
+
+ return data
+
+ def check_temporal_consistency(self, data):
+ """Validate temporal patterns"""
+ # Check for unrealistic jumps in time series
+ diff = data.diff('time')
+ threshold = 3 * diff.std()
+ outliers = abs(diff) > threshold
+
+ # Flag or interpolate outliers
+ data = data.where(~outliers)
+ return data
+
+ def check_spatial_consistency(self, data):
+ """Validate spatial patterns"""
+ # Check for isolated extreme values
+Security and Privacy
+Data Protection
+Authentication: Secure user authentication and session management
+Authorization: Role-based access control
+Encryption: Data encryption in transit and at rest
+Privacy: User location and preference protection
+Compliance: GDPR and other privacy regulation adherence
+API Security
+ # Implementation for spatial outlier detection
+ return data
+python
+from flask import Flask, request, jsonify
+from functools import wraps
+import jwt
+import hashlib
+class APISecurityManager:
+ def __init__(self, secret_key):
+ self.secret_key = secret_key
+ self.rate_limits = {}
+
+ def authenticate_user(self, token):
+ """Verify user authentication token"""
+ try:
+ payload = jwt.decode(token, self.secret_key, algorithms=['HS256'])
+ return payload['user_id']
+ except jwt.InvalidTokenError:
+ return None
+
+ def rate_limit(self, max_requests=100, window=3600):
+ """Implement rate limiting"""
+ def decorator(f):
+ @wraps(f)
+ def decorated_function(*args, **kwargs):
+ client_ip = request.remote_addr
+ current_time = time.time()
+
+ # Check rate limit
+ if self.check_rate_limit(client_ip, current_time, max_requests, window):
+ return f(*args, **kwargs)
+ else:
+ return jsonify({'error': 'Rate limit exceeded'}), 429
+ return decorated_function
+ return decorator
+
+ def sanitize_input(self, data):
+ """Sanitize user input"""
+ # R # Remo emovve pot e potentially har entially harmf mful char ul charact acter erss
+ # V # Validat alidate c e coor oordinat dinate r e ranges anges
+ # Check date formats
+ return data
+Documentation and Maintenance
+API Documentation
+yaml
+# OpenAPI/Swagger specification example
+openapi: 3.0.0
+info:
+ title: Weather Probability API
+ version: 1.0.0
+ description: API for calculating weather condition probabilities
+paths:
+ /probability:
+ post:
+ summary: Calculate weather probabilities
+ requestBody:
+ required: true
+ content:
+ application/json:
+ schema:
+ type: object
+ properties:
+ location:
+ type: object
+ properties:
+ latitude: {type: number, minimum: -90, maximum: 90}
+ longitude: {type: number, minimum: -180, maximum: 180}
+ date:
+ type: string
+ format: date
+ example: "2024-07-15"
+ conditions:
+ type: array
+ items:
+ type: string
+ enum: [very_hot, very_cold, very_wet, very_windy, very_uncomfortable]
+ responses:
+ 200:
+ description: Probability calculations
+ content:
+ application/json:
+ schema:
+ type: object
+ properties:
+ probabilities:
+ type: object
+ confidence_intervals:
+User Documentation
+Getting Started Guide: Step-by-step setup instructions
+API Reference: Comprehensive endpoint documentation
+Tutorials: Common use case examples
+FAQ: Frequently asked questions and troubleshooting
+Best Practices: Optimization and efficiency guidelines
+Monitoring and Analytics
+System Monitoring
+ type: object
+ historical_context:
+ type: object
+python
+import logging
+from datetime import datetime
+import psutil
+import requests
+class SystemMonitor:
+ def __init__(self):
+ self.logger = logging.getLogger(__name__)
+ self.metrics = {}
+
+ def monitor_api_performance(self):
+ """Monitor API response times and errors"""
+ start_time = datetime.now()
+
+ # Track response times
+ response_time = (datetime.now() -- start_time).total_seconds()
+ self.metrics['api_response_time'] = response_time
+
+ # Monit # Monitor s or syst ystem r em resesour ourcceses
+ self.metrics['cpu_usage'] = psutil.cpu_percent()
+ self.metrics['memory_usage'] = psutil.virtual_memory().percent
+ self.metrics['disk_usage'] = psutil.disk_usage('/').percent
+
+ return self.metrics
+
+ def monitor_data_sources(self):
+ """Check availability of external data sources"""
+ sources = {
+ 'nasa_earthdata': 'https://search.earthdata.nasa.gov/health',
+ 'giovanni': 'https://giovanni.gsfc.nasa.gov/giovanni/',
+ 'cptec': 'https://satelite.cptec.inpe.br/'
+ }
+
+ availability = {}
+ for name, url in sources.items():
+ try:
+ response = requests.get(url, timeout=10)
+ availability[name] = response.status_code == 200
+ except requests.RequestException:
+ availability[name] = False
+
+ return availability
+User Analytics
+Usage Patterns: Track popular locations and date ranges
+Performance Metrics: Response times and error rates
+User Feedback: Rating and review collection
+Feature Usage: Monitor which features are most used
+Geographic Distribution: User location analysis
+Testing and Quality Assurance
+Unit Testing
+python
+import unittest
+import numpy as np
+from unittest.mock import patch, Mock
+class TestWeatherProbabilityCalculator(unittest.TestCase):
+ def setUp(self):
+ self.calculator = WeatherProbabilityCalculator()
+ self.sample_data = np.random.normal(20, 5, 1000) # Sample temperature data
+
+ def test_probability_calculation(self):
+ """Test probability calculation accuracy"""
+ # Test with known distribution
+ result = self.calculator.calculate_extreme_probabilities(
+ {'temperature': {'percentiles': [0, 5, 25, 50, 75, 95, 100]}}
+ )
+
+ # V # Ver eriiffy r y results ar esults are within expect e within expected r ed ranges anges
+ self.assertGreaterEqual(result['very_hot'], 0)
+ self.assertLessEqual(result['very_hot'], 1)
+
+ def test_data_validation(self):
+ """Test data quality validation"""
+ # Test with invalid data
+ invalid_data = np.array([--200, 100, 25, 30]) # In # Invvalid t alid temper emperatur aturee
+ validated = self.calculator.validate_temperature_data(invalid_data)
+
+ # V # Ver eriiffy in y invvalid v alid values ar alues are handled e handled
+ self.assertNotIn(--200, validated)
+
+ @patch('earthaccess.search_data')
+ def test_nasa_data_access(self, mock_search):
+ """Test NASA data access functionality"""
+ mock_search.return_value = [Mock()]
+
+ # T # Test dat est data r a retr etriev ieval al
+ result = self.calculator.get_nasa_data('temperature', (40, --100),
+ '2020-01-01', '2020-12-31')
+
+ # V # Ver eriiffy API was called c y API was called corr orrectly ectly
+ mock_search.assert_called_once()
+class TestDataIntegration(unittest.TestCase):
+ def test_multi_source_integration(self):
+Integration Testing
+Deployment and DevOps
+Container Configuration
+ """Test integration of multiple data sources"""
+ # Test combining NASA and CPTEC data
+ pass
+
+ def test_temporal_alignment(self):
+ """Test temporal data alignment"""
+ # T # Test s est synchr ynchronization o onization of di f difffer ferent t ent tempor emporal r al resesolutions olutions
+ pass
+python
+class TestSystemIntegration(unittest.TestCase):
+ def test_end_to_end_workflow(self):
+ """Test complete user workflow"""
+ # 1. User selects location
+ location = {'latitude': 40.0, 'longitude': --100.0}
+
+ # 2. User selects date
+ target_date = '2024-07-15'
+
+ # 3. S # 3. Syst ystem r em retr etriev ieves hist es histor orical dat ical dataa
+ historical_data = self.data_integrator.get_historical_data(
+ location, '2000-01-01', '2023-12-31'
+ )
+
+ # 4. S # 4. Syst ystem calculat em calculates pr es probobabilities abilities
+ probabilities = self.calculator.calculate_probabilities(
+ historical_data, target_date
+ )
+
+ # 5. V # 5. Ver eriiffy r y results ar esults are r e reas easonable onable
+ self.assertIsInstance(probabilities, dict)
+ self.assertIn('very_hot', probabilities)
+dockerfile
+Kubernetes Deployment
+# Dock # Docker erffile for w ile for weather pr eather probobability application ability application
+FROM python:3.9-slim
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+ libhdf5-dev \
+ libnetcdf-dev \
+ libgdal-dev \
+ && rm -rf /var/lib/apt/lists/*
+# Set working directory
+WORKDIR /app
+# C # Copopy r y requir equirements and inst ements and install Py all Python dependencies thon dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+# Copy application code
+COPY . .
+# Set environment variables
+ENV FLASK_APP=app.py
+ENV FLASK_ENV=production
+# Expose port
+EXPOSE 5000
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+ CMD curl -f http://localhost:5000/health || exit 1
+# Run application
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+yaml
+# k # kuber ubernet netes-deplo es-deployment.y yment.yaml aml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+ name: weather--probability--app
+spec:
+ replicas: 3
+ selector:
+ matchLabels:
+ app: weather--probability
+ template:
+ metadata:
+ labels:
+ app: weather--probability
+ spec:
+ containers:
+ -- name: weather--app
+ image: weather--probability:latest
+ ports:
+ -- containerPort: 5000
+ env:
+ -- name: NASA_EARTHDATA_USERNAME
+ valueFrom:
+ secretKeyRef:
+ name: nasa--credentials
+ key: username
+ -- name: NASA_EAR NASA_EARTHD THDAATTA_P A_PASSWORD ASSWORD
+ valueFrom:
+ secretKeyRef:
+ name: nasa--credentials
+ key: password
+ resources:
+ limits:
+ memory: "1Gi"
+ cpu: "500m"
+ requests:
+ memory: "512Mi"
+ cpu: "250m"
+ livenessProbe:
+ httpGet:
+ path: /health
+ port: 5000
+ initialDelaySeconds: 30
+CI/CD Pipeline
+ periodSeconds: 10
+--- ---
+apiVersion: v1
+kind: Service
+metadata:
+ name: weather--probability--service
+spec:
+ selector:
+ app: weather--probability
+ ports:
+ -- protocol: TCP
+ port: 80
+ targetPort: 5000
+ type: LoadBalancer
+yaml
+# .github/w # .github/work orkfflolows/deplo ws/deployy.yml .yml
+name: Deploy Weather Probability App
+on:
+ push:
+ branches: [main]
+ pull_request:
+ branches: [main]
+jobs:
+ test:
+ runs-on: ubuntu--latest
+ steps:
+ -- uses: actions/checkout@v2
+
+ -- name: Set up Python
+ uses: actions/setup--python@v2
+ with:
+ python-version: 3.9
+
+ -- name: Install dependencies
+ run: |
+ pip install -r requirements.txt
+ pip install pytest coverage
+
+ -- name: Run tests
+ run: |
+ pytest tests/ -v
+ coverage run -m pytest
+ coverage report
+
+ -- name: Run linting
+ run: |
+ flake8 app/ tests/
+ black --check app/ tests/
+
+ build:
+ needs: test
+ runs-on: ubuntu--latest
+ if: github.ref == 'refs/heads/main'
+
+ steps:
+ -- uses: actions/checkout@v2
+Scalability and Performance
+Database Optimization
+
+ -- name: Build Docker image
+ run: |
+ docker build -t weather-probability:${{ github.sha }} .
+ docker tag weather-probability:${{ github.sha }} weather-probability:latest
+
+ -- name: Push to registry
+ run: |
+ docker push weather-probability:${{ github.sha }}
+ docker push weather-probability:latest
+
+ deploy:
+ needs: build
+ runs-on: ubuntu--latest
+ if: github.ref == 'refs/heads/main'
+
+ steps:
+ -- name: Deploy to Kubernetes
+ run: |
+ kubectl apply -f kubernetes-deployment.yaml
+ kubectl rollout status deployment/weather-probability-app
+sql
+-- Optimized dat -- Optimized datababas ase s e schema for w chema for weather dat eather dataa
+CREATE TABLE weather_historical (
+ id SERIAL PRIMARY KEY,
+ location_id INTEGER REFERENCES locations(id),
+ date_recorded DATE NOT NULL,
+ temperature REAL,
+ precipitation REAL,
+ wind_speed REAL,
+ humidity REAL,
+ pressure REAL,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+-- Indexes for performance
+CREATE INDEX idx_weather_location_date ON weather_historical(location_id, date_recorded);
+CREATE INDEX idx_weather_date ON weather_historical(date_recorded);
+CREATE INDEX idx_weather_temperature ON weather_historical(temperature);
+-- P -- Par artitioning b titioning by y y year for lar ear for large dat ge datas asets ets
+CREATE TABLE weather_historical_2024 PARTITION OF weather_historical
+FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+-- Materialized views for common queries
+CREATE MATERIALIZED VIEW weather_monthly_stats AS
+SELECT
+ location_id,
+ EXTRACT(MONTH FROM date_recorded) as month,
+ EXTRACT(DAY FROM date_recorded) as day,
+ AVG(temperature) as avg_temp,
+ PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY temperature) as temp_p5,
+ PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY temperature) as temp_p95,
+ AVG(precipitation) as avg_precip,
+ PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY precipitation) as precip_p90
+FROM weather_historical
+GROUP BY location_id, EXTRACT(MONTH FROM date_recorded), EXTRACT(DAY FROM date_recorded);
+-- R -- Refr efresh mat esh mater erialized view per ialized view periodically iodically
+CREATE OR REPLACE FUNCTION refresh_weather_stats()
+RETURNS void AS $
+BEGIN
+ REFRESH MATERIALIZED VIEW CONCURRENTLY weather_monthly_stats;
+Caching Strategy
+END;
+$ LANGUAGE plpgsql;
+python
+import redis
+import json
+from functools import wraps
+class CacheManager:
+ def __init__(self, redis_host='localhost', redis_port=6379):
+ self.redis_client = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
+ self.default_ttl = 3600 # 1 hour
+
+ def cache_result(self, ttl=None):
+ """Decorator for caching function results"""
+ def decorator(func):
+ @wraps(func)
+ def wrapper(*args, **kwargs):
+ # Cr # Creat eate cache k e cache key fr ey from f om function name and ar unction name and arguments guments
+ cache_key = f"{func.__name__}:{hash(str(args) + str(sorted(kwargs.items())))}"
+
+ # Try to get from cache
+ cached_result = self.redis_client.get(cache_key)
+ if cached_result:
+ return json.loads(cached_result)
+
+ # Execute function and cache result
+ result = func(*args, **kwargs)
+ self.redis_client.setex(
+ cache_key,
+ ttl or self.default_ttl,
+ json.dumps(result, default=str)
+ )
+ return result
+ return wrapper
+ return decorator
+
+ def invalidate_location_cache(self, location):
+ """Invalidate cache for specific location"""
+ pattern = f"*{location['latitude']}*{location['longitude']}*"
+ keys = self.redis_client.keys(pattern)
+ if keys:
+ self.redis_client.delete(*keys)
+# Usage example
+cache_manager = CacheManager()
+Load Balancing
+@cache_manager.cache_result(ttl=7200) # Cache for 2 hours
+def calculate_weather_probabilities(location, date, conditions):
+ # Expensive calculation here
+ return probabilities
+python
+from flask import Flask
+import requests
+from random import choice
+class LoadBalancer:
+ def __init__(self):
+ self.data_sources = [
+ {'url': 'https://api1.nasa.gov', 'weight': 3, 'healthy': True},
+ {'url': 'https://api2.nasa.gov', 'weight': 2, 'healthy': True},
+ {'url': 'https://api3.nasa.gov', 'weight': 1, 'healthy': True}
+ ]
+ self.health_check_interval = 300 # 5 minutes
+
+ def select_data_source(self):
+ """Select data source based on weights and health"""
+ healthy_sources = [s for s in self.data_sources if s['healthy']]
+
+ if not healthy_sources:
+ raise Exception("No healthy data sources available")
+
+ # Weighted selection
+ weights = [s['weight'] for s in healthy_sources]
+ return choice(healthy_sources)
+
+ def health_check(self):
+ """Check health of all data sources"""
+ for source in self.data_sources:
+ try:
+ response = requests.get(f"{source['url']}/health", timeout=10)
+ source['healthy'] = response.status_code == 200
+ except requests.RequestException:
+ source['healthy'] = False
+
+ def make_request(self, endpoint, params):
+ """Make request with automatic failover"""
+ max_retries = 3
+
+ for attempt in range(max_retries):
+ source = self.select_data_source()
+ try:
+ response = requests.get(f"{source['url']}{endpoint}",
+ params=params, timeout=30)
+ if response.status_code == 200:
+Future Enhancements
+Machine Learning Integration
+ return response.json()
+ except requests.RequestException:
+ source['healthy'] = False
+ continue
+
+ raise Exception("All data sources failed")
+python
+import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+import joblib
+class MLWeatherPredictor:
+ def __init__(self):
+ self.model = RandomForestRegressor(n_estimators=100, random_state=42)
+ self.feature_columns = [
+ 'day_of_year', 'latitude', 'longitude', 'elevation',
+ 'historical_temp_mean', 'historical_temp_std',
+ 'historical_precip_mean', 'historical_precip_std',
+ 'enso_index', 'nao_index' # Climate indices
+ ]
+
+ def prepare_features(self, location, date, historical_data):
+ """Prepare features for ML model"""
+ features = {}
+
+ # Temporal features
+ features['day_of_year'] = date.timetuple().tm_yday
+
+ # Geographic features
+ features['latitude'] = location['latitude']
+ features['longitude'] = location['longitude']
+ features['elevation'] = self.get_elevation(location)
+
+ # Historical statistics
+ same_date_data = self.extract_same_date_historical(historical_data, date)
+ features['historical_temp_mean'] = np.mean(same_date_data['temperature'])
+ features['historical_temp_std'] = np.std(same_date_data['temperature'])
+ features['historical_precip_mean'] = np.mean(same_date_data['precipitation'])
+ features['historical_precip_std'] = np.std(same_date_data['precipitation'])
+
+ # Climate indices
+ features['enso_index'] = self.get_enso_index(date)
+ features['nao_index'] = self.get_nao_index(date)
+
+ return np.array([features[col] for col in self.feature_columns]).reshape(1, --1)
+
+ def train_model(self, training_data):
+ """Train ML model on historical data"""
+ X = training_data[self.feature_columns]
+Real-time Data Integration
+ y = training_data['extreme_event_probability']
+
+ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+ self.model.fit(X_train, y_train)
+
+ # Evaluate model
+ train_score = self.model.score(X_train, y_train)
+ test_score = self.model.score(X_test, y_test)
+
+ print(f"Training Score: {train_score:.3f}")
+ print(f"Testing Score: {test_score:.3f}")
+
+ # Save model
+ joblib.dump(self.model, 'weather_probability_model.pkl')
+
+ def predict_probability(self, location, date, historical_data):
+ """Predict probability using ML model"""
+ features = self.prepare_features(location, date, historical_data)
+ probability = self.model.predict(features)[0]
+
+ # Get feature importance for explainability
+ importance = dict(zip(self.feature_columns, self.model.feature_importances_))
+
+ return {
+ 'probability': probability,
+ 'confidence': self.calculate_confidence(features),
+ 'feature_importance': importance
+ }
+python
+import asyncio
+import websockets
+from datetime import datetime, timedelta
+class RealTimeDataStreamer:
+ def __init__(self):
+ self.subscribers = set()
+ self.data_sources = {
+ 'weather_stations': 'ws://api.weather.gov/realtime',
+ 'satellite_feeds': 'ws://lance.modaps.eosdis.nasa.gov/stream',
+ 'radar_data': 'ws://radar.weather.gov/stream'
+ }
+
+ async def connect_to_sources(self):
+ """Connect to real-time data sources"""
+ tasks = []
+ for name, url in self.data_sources.items():
+ task = asyncio.create_task(self.stream_data(name, url))
+ tasks.append(task)
+
+ await asyncio.gather(*tasks)
+
+ async def stream_data(self, source_name, url):
+ """Stream data from a specific source"""
+ try:
+ async with websockets.connect(url) as websocket:
+ async for message in websocket:
+ data = json.loads(message)
+ await self.process_real_time_data(source_name, data)
+ except Exception as e:
+ print(f"Error streaming from {source_name}: {e}")
+ # Implement reconnection logic
+
+ async def process_real_time_data(self, source, data):
+ """Process incoming real-time data"""
+ # Update current conditions
+ current_conditions = self.update_current_conditions(source, data)
+
+ # Noti # Notiffy subs y subscrcriber iberss
+ if self.subscribers:
+ message = {
+ 'source': source,
+ 'timestamp': datetime.now().isoformat(),
+Conclusion
+This comprehensive guide provides the foundation for building a sophisticated weather probability
+application using NASA's Earth observation tools and data resources. The integration of multiple data
+sources, advanced statistical analysis, and modern web technologies creates a powerful platform for
+helping users make informed decisions about outdoor activities.
+Key success factors for implementation:
+1. Robust Data Integration: Seamlessly combining NASA and international data sources
+2. Statistical Rigor: Proper probability calculations with confidence intervals
+3. User Experience: Intuitive interface with clear visualizations
+4. Performance Optimization: Efficient data access and caching strategies
+5. Scalability: Architecture that can handle growing user base and data volumes
+6. Quality Assurance: Comprehensive testing and monitoring
+7. Documentation: Clear guides for users and developers
+The tools and techniques outlined in this guide provide a solid foundation for creating an application
+that truly serves the needs of users planning outdoor activities while leveraging the vast wealth of
+NASA's Earth science data collection.
+ 'data': current_conditions
+ }
+ await self.broadcast_update(message)
+
+ async def broadcast_update(self, message):
+ """Broadcast updates to all subscribers"""
+ if self.subscribers:
+ await asyncio.gather(
+ *[ws.send(json.dumps(message)) for ws in self.subscribers],
+ return_exceptions=True
+ )
+
+ async def add_subscriber(self, websocket):
+ """Add new subscriber for real-time updates"""
+ self.subscribers.add(websocket)
+ try:
+ await websocket.wait_closed()
+ finally:
+ self.subscribers.remove(websocket)
+Remember to always validate results against known conditions, provide appropriate uncertainty
+estimates, and clearly communicate the limitations of historical probability analysis versus real-time
+weather forecasting.
+
+
+
+**Simple Data Chain Explanation: \"Will It Rain On My Parade?\"**
+
+**The Big Picture in Simple Terms**
+
+Think of this like asking a weather expert: **\"What are the chances it
+will be very hot/cold/wet/windy on July 15th in New York?\"**
+
+But instead of one expert, you\'re asking **multiple weather databases**
+that have been collecting data for **20+ years**.
+
+**Step 1: Where We Get the Data (The Sources)**
+
+**🛰️ NASA Satellites & Models**
+
+-   **What**: Satellites flying around Earth taking weather measurements
+    every day
+
+-   **Data**: Temperature, rainfall, wind speed, humidity for the ENTIRE
+    PLANET
+
+-   **Time span**: 20-40 years of daily data
+
+-   **Format**: Files like NetCDF, HDF, GRIB (think of them as different
+    types of ZIP files with weather data)
+
+**🇧🇷 CPTEC-INPE Brazil**
+
+-   **What**: Brazilian weather agency with detailed South America data
+
+-   **Data**: Regional weather models, especially good for tropical
+    areas
+
+-   **Format**: BRAMS model files (binary format)
+
+**📊 Data Rods Service**
+
+-   **What**: NASA\'s special service that gives you time-series for ONE
+    specific location
+
+-   **Data**: Instead of downloading huge global files, you get just
+    YOUR location\'s data
+
+-   **Format**: Simple CSV/ASCII text files
+
+**Step 2: What Format the Data Comes In**
+
+**Raw Data Looks Like This:**
+
+🗂️ Global Weather File (NetCDF)
+
+├── Temperature: 1,000,000 numbers (360 longitudes × 180 latitudes × 365
+days)
+
+├── Precipitation: 1,000,000 numbers
+
+├── Wind Speed: 1,000,000 numbers
+
+└── Coordinates: Where each number belongs on Earth
+
+**After Processing, It Becomes:**
+
+📍 Your Location (40°N, 100°W):
+
+Date Temperature Precipitation Wind
+
+2003-07-15 28.5°C 0.2mm 12 km/h
+
+2004-07-15 31.2°C 0.0mm 8 km/h
+
+2005-07-15 29.8°C 5.4mm 15 km/h
+
+\... (20 years of July 15th data)
+
+**Step 3: How We Process the Data**
+
+**🔄 The Universal Processor**
+
+Raw Data → Universal Processor → Clean Data
+
+↓ ↓ ↓
+
+NetCDF files → Detects format → Standard format
+
+HDF images → Reads data → Same coordinates
+
+GRIB forecasts → Fixes units → Quality checked
+
+CSV text → Handles errors → Ready to analyze
+
+**What the Processor Does:**
+
+1.  **Detects**: \"Is this a NetCDF file or HDF file or CSV?\"
+
+2.  **Reads**: Opens the file and extracts the weather numbers
+
+3.  **Standardizes**: Makes sure all coordinates use the same system
+    (lat/lon)
+
+4.  **Cleans**: Removes bad data points, fixes missing values
+
+5.  **Converts**: Puts everything in the same units (°C, mm, km/h)
+
+**Step 4: How We Calculate Weather Probabilities**
+
+**📈 Historical Analysis**
+
+For your specific date and location:
+
+1.  **Collect**: Get 20+ years of weather data for that exact date
+
+July 15th in New York (20 years):
+
+Year 2003: 28°C ← Normal
+
+Year 2004: 31°C ← Normal
+
+Year 2005: 38°C ← Very Hot!
+
+Year 2006: 29°C ← Normal
+
+\... and so on
+
+2.  **Calculate Thresholds**:
+
+-   **Very Hot**: Top 5% of temperatures (95th percentile)
+
+-   **Very Cold**: Bottom 5% of temperatures (5th percentile)
+
+-   **Very Wet**: Top 10% of rainfall (90th percentile)
+
+-   **Very Windy**: Top 15% of wind speeds (85th percentile)
+
+3.  **Count Occurrences**:
+
+Out of 20 years of July 15th:
+
+\- Very Hot (\>35°C): 2 times → 10% probability
+
+\- Very Wet (\>10mm): 3 times → 15% probability
+
+\- Very Windy (\>25km/h): 1 time → 5% probability
+
+**Step 5: What the User Gets**
+
+**🎯 Simple Answer**
+
+**User asks**: \"Will it be very hot on July 15th in New York?\"
+
+**App answers**:
+
+-   ✅ **10% chance** of very hot weather
+
+-   ✅ **15% chance** of heavy rain
+
+-   ✅ **5% chance** of very windy conditions
+
+-   ✅ **Based on 20 years** of historical data
+
+**📱 User Interface**
+
+📍 Location: New York, NY
+
+📅 Date: July 15th
+
+Weather Probability Forecast:
+
+🌡️ Very Hot (\>35°C): ███░░░░░░░ 10%
+
+🌧️ Very Wet (\>10mm): ████░░░░░░ 15%
+
+💨 Very Windy (\>25km/h): █░░░░░░░░░ 5%
+
+❄️ Very Cold (\<10°C): ░░░░░░░░░░ 0%
+
+Historical Context:
+
+📊 Average temperature: 29°C
+
+📈 Hottest July 15th: 38°C (2005)
+
+📉 Coolest July 15th: 22°C (2009)
+
+**The Complete Data Flow (Simple Version)**
+
+🛰️ NASA Satellites collect data
+
+↓
+
+🗂️ Data stored in various formats (NetCDF, HDF, etc.)
+
+↓
+
+🔄 Universal Processor reads and cleans data
+
+↓
+
+📍 Extract data for user\'s specific location
+
+↓
+
+📊 Analyze 20+ years of historical data for that date
+
+↓
+
+🧮 Calculate probability percentiles (5%, 10%, 90%, 95%)
+
+↓
+
+📱 Show user simple percentages: \"15% chance of very hot weather\"
+
+**Why This Approach Works**
+
+**✅ Reliable: Uses 20+ years of real satellite data**
+
+**✅ Accurate: Combines multiple data sources (NASA + Brazil + others)**
+
+**✅ Simple: User gets easy-to-understand percentages**
+
+**✅ Fast: Pre-processed data means quick responses**
+
+**✅ Global: Works anywhere on Earth**
+
+**Technical Summary (Behind the Scenes)**
+
+**For developers**: The app automatically handles 6+ different data
+formats, authenticates with NASA servers, processes terabytes of climate
+data, performs statistical analysis, and serves results through a simple
+API - all while the user just sees \"15% chance of rain.\"
+
+**For users**: Type in a location and date, get instant weather
+probability based on decades of satellite data. No weather forecasting -
+just historical odds to help you plan better.
