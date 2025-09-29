@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, CheckCircle, AlertCircle, Database } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle, Database, Satellite, Shield, BarChart3 } from 'lucide-react';
 import { LoadingProgress } from '../types/weather';
 
 interface LoadingIndicatorProps {
@@ -29,6 +29,12 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
     }
   };
 
+  const getSourceIcon = (source: string) => {
+    if (source.includes('Authentication')) return <Shield size={16} />;
+    if (source.includes('Data')) return <Satellite size={16} />;
+    if (source.includes('Analysis')) return <BarChart3 size={16} />;
+    return <Database size={16} />;
+  };
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'loading':
@@ -55,14 +61,14 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
             animate={{ rotate: 360 }}
             transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
           >
-            <Database size={24} />
+            <Satellite size={24} />
           </motion.div>
         </div>
         
         <div className="loading-info">
           <h3 className="loading-title">{title}</h3>
           <p className="loading-subtitle">
-            Analyzing weather data from multiple sources...
+            Processing 25 years of NASA satellite observations...
           </p>
         </div>
       </div>
@@ -93,7 +99,15 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
           >
             <div className="source-header">
               <div className="source-status">
-                {getStatusIcon(item.status)}
+                {item.status === 'loading' ? (
+                  <Loader2 className="animate-spin" size={16} />
+                ) : item.status === 'complete' ? (
+                  <CheckCircle className="text-green-500" size={16} />
+                ) : item.status === 'error' ? (
+                  <AlertCircle className="text-red-500" size={16} />
+                ) : (
+                  getSourceIcon(item.source)
+                )}
               </div>
               <div className="source-info">
                 <span className="source-name">{item.source}</span>
@@ -122,13 +136,14 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
       </div>
 
       <div className="loading-tips">
-        <h4>Processing Details:</h4>
+        <h4>NASA Data Processing Pipeline:</h4>
         <ul>
-          <li>🌡️ Extracting temperature time series</li>
-          <li>🌧️ Analyzing precipitation patterns</li>
-          <li>💨 Processing wind speed data</li>
-          <li>📊 Calculating statistical thresholds</li>
-          <li>🎯 Computing probability distributions</li>
+          <li>🛰️ Connecting to NASA Earthdata services</li>
+          <li>📡 Downloading MERRA-2 reanalysis data</li>
+          <li>🌧️ Retrieving GPM precipitation records</li>
+          <li>💧 Processing GLDAS hydrology data</li>
+          <li>📊 Calculating percentile-based thresholds</li>
+          <li>🎯 Computing historical probabilities</li>
         </ul>
       </div>
     </motion.div>

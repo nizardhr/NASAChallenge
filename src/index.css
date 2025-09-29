@@ -630,10 +630,38 @@ html, body {
   align-self: flex-start;
 }
 
-/* Loading Indicator Styles */
+/* NASA Data Sources Styles */
+.data-sources-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.data-source-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: calc(var(--clay-border-radius) * 0.5);
+  font-size: 0.875rem;
+}
+
+.source-years {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+/* Enhanced Loading Styles */
 .loading-indicator {
   padding: var(--spacing-xl);
   margin: var(--spacing-lg) 0;
+  background: var(--glass-bg-primary);
+  backdrop-filter: var(--glass-backdrop);
+  border: var(--glass-border);
+  border-radius: var(--clay-border-radius);
 }
 
 .loading-header {
@@ -647,9 +675,22 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 50px;
-  height: 50px;
-  color: var(--weather-primary);
+  width: 60px;
+  height: 60px;
+  background: var(--clay-bg-primary);
+  border-radius: 50%;
+  box-shadow: var(--clay-shadow-light);
+}
+
+.loading-info h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-xs);
+}
+
+.loading-info p {
+  opacity: 0.8;
+  font-size: 1rem;
 }
 
 .loading-info {
@@ -784,6 +825,11 @@ html, body {
   gap: var(--spacing-md);
   min-height: 280px;
   position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.probability-card:hover {
+  transform: translateY(-4px);
 }
 
 .probability-card.high {
@@ -911,13 +957,15 @@ html, body {
   gap: var(--spacing-xl);
 }
 
+/* Enhanced Results Header */
 .results-header {
   text-align: center;
-  padding: var(--spacing-lg);
+  padding: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
 }
 
 .results-header h2 {
-  font-size: 2rem;
+  font-size: 2.5rem;
   font-weight: 700;
   margin-bottom: var(--spacing-md);
   background: linear-gradient(135deg, var(--weather-primary), var(--weather-accent));
@@ -933,6 +981,13 @@ html, body {
   gap: var(--spacing-md);
   font-size: 0.875rem;
   opacity: 0.8;
+}
+
+.results-meta span {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  font-weight: 500;
 }
 
 .probability-grid {
@@ -1103,6 +1158,21 @@ html, body {
   font-weight: 500;
 }
 
+/* Auto-analysis Indicator */
+.auto-analysis-indicator {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--glass-bg-primary);
+  backdrop-filter: var(--glass-backdrop);
+  border: var(--glass-border);
+  border-radius: 25px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  z-index: 1000;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .main-content {
@@ -1133,6 +1203,10 @@ html, body {
   .quality-grid {
     grid-template-columns: 1fr;
   }
+  
+  .results-header h2 {
+    font-size: 2rem;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1151,6 +1225,10 @@ html, body {
   
   .chart-container {
     height: 250px;
+  }
+  
+  .results-header h2 {
+    font-size: 1.75rem;
   }
 }
 
