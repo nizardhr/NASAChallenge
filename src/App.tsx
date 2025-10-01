@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { WeatherAnalyzer } from './components/WeatherAnalyzer';
+import { NASAAuthTest } from './components/NASAAuthTest';
 import { CacheManager } from './services/cacheManager';
 
 // Initialize cache manager
@@ -26,6 +27,7 @@ function App() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.8 }}
       >
+        <NASAAuthTest />
         <WeatherAnalyzer />
       </motion.main>
     </div>
