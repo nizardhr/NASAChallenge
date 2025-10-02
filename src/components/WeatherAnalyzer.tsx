@@ -1,338 +1,291 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Calendar, Satellite, Database, Thermometer, Droplets, Wind, Sun, Cloud } from 'lucide-react';
+import { MapPin, Calendar, Satellite, Database } from 'lucide-react';
 import { Coordinates } from '../types/weather';
-import { NASAAuthService } from '../services/nasaAuth';
-import { NASADataFetcher } from '../services/nasaDataFetcher';
-import { WeatherProbabilityCalculator, ProbabilityResults } from '../services/probabilityCalculator';
+import { nasaAuthService } from '../services/nasaAuth';
+import { nasaDataFetcher } from '../services/nasaDataService';
 import { CacheManager } from '../services/cacheManager';
 import { ProbabilityCard } from './ProbabilityCard';
 import { LocationPicker } from './LocationPicker';
 import { DatePicker } from './DatePicker';
 import { LoadingIndicator } from './LoadingIndicator';
 
-// Initialize NASA services
-const authService = new NASAAuthService();
-const dataFetcher = new NASADataFetcher(authService);
-const probabilityCalculator = new WeatherProbabilityCalculator();
 const cacheManager = new CacheManager();
 
 export const WeatherAnalyzer: React.FC = () => {
   const [selectedLocation, setSelectedLocation] = useState<Coordinates | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [analysis, setAnalysis] = useState<ProbabilityResults | null>(null);
+  const [analysis, setAnalysis] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState<any[]>([]);
+  const [loadingProgress, setLoadingProgress] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Setup NASA authentication on mount
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await authService.authenticate({
-          username: import.meta.env.VITE_NASA_USERNAME || 'demo_user',
-          password: import.meta.env.VITE_NASA_PASSWORD || 'demo_pass'
-        });
-        console.log('✅ NASA authentication successful');
-      } catch (err) {
-        console.error('❌ NASA authentication failed:', err);
-      }
-    };
-    initAuth();
-  }, []);
-
-  // Initialize cache manager
   useEffect(() => {
     cacheManager.initialize().catch(console.error);
   }, []);
 
-  // Automatic analysis when location and date are selected
-  useEffect(() => {
-    if (selectedLocation && selectedDate && authService.isAuthenticated()) {
-      performAnalysis();
-    }
-  }, [selectedLocation, selectedDate]);
-
   const handleLocationSelect = useCallback((location: Coordinates) => {
     setSelectedLocation(location);
+    setError(null);
   }, []);
 
   const handleDateSelect = useCallback((date: Date) => {
     setSelectedDate(date);
+    setError(null);
   }, []);
 
   const performAnalysis = async () => {
     if (!selectedLocation || !selectedDate) return;
 
+    if (!nasaAuthService.isAuthenticated()) {
+      setError('⚠️ Please authenticate with NASA Earthdata first (scroll up to login)');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setLoadingProgress([]);
+    setAnalysis(null);
 
     try {
-      // Setup progress tracking
-      dataFetcher.onProgress((progress) => {
-        setLoadingProgress(prev => {
-          const filtered = prev.filter(p => p.source !== progress.source);
-          return [...filtered, progress];
-        });
+      setLoadingProgress(prev => [...prev, '🔐 Authenticated with NASA']);
+
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setFullYear(startDate.getFullYear() - 1);
+
+      setLoadingProgress(prev => [...prev, '🛰️ Fetching real NASA satellite data...']);
+      setLoadingProgress(prev => [...prev, `📍 Location: ${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`]);
+      setLoadingProgress(prev => [...prev, `📅 Date range: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`]);
+
+      const timeSeries = await nasaDataFetcher.fetchHistoricalWeatherData(
+        selectedLocation,
+        startDate,
+        endDate
+      );
+
+      setLoadingProgress(prev => [...prev, '✅ NASA data retrieved successfully']);
+
+      const quality = nasaDataFetcher.getDataQuality(timeSeries);
+
+      setLoadingProgress(prev => [...prev, `📊 Temperature points: ${timeSeries.temperature.length}`]);
+      setLoadingProgress(prev => [...prev, `💧 Precipitation points: ${timeSeries.precipitation.length}`]);
+      setLoadingProgress(prev => [...prev, `📈 Data quality: ${quality.completeness}% complete`]);
+
+      const avgTemp = timeSeries.temperature.length > 0
+        ? timeSeries.temperature.reduce((sum, p) => sum + p.value, 0) / timeSeries.temperature.length
+        : 0;
+
+      const avgPrecip = timeSeries.precipitation.length > 0
+        ? timeSeries.precipitation.reduce((sum, p) => sum + p.value, 0) / timeSeries.precipitation.length
+        : 0;
+
+      setAnalysis({
+        location: selectedLocation,
+        date: selectedDate,
+        timeSeries: timeSeries,
+        quality: quality,
+        statistics: {
+          avgTemperature: avgTemp,
+          avgPrecipitation: avgPrecip,
+          totalDataPoints: timeSeries.temperature.length + timeSeries.precipitation.length
+        },
+        sampleData: {
+          temperature: timeSeries.temperature.slice(0, 5),
+          precipitation: timeSeries.precipitation.slice(0, 5)
+        }
       });
 
-      // Fetch historical data from NASA
-      const datasets = await dataFetcher.fetchHistoricalWeatherData(
-        selectedLocation,
-        selectedDate,
-        20 // 20 years of historical data
-      );
+      setLoadingProgress(prev => [...prev, '✅ Analysis complete!']);
 
-      if (datasets.length === 0) {
-        throw new Error('No data retrieved from NASA services');
-      }
-
-      // Calculate probabilities using real NASA data
-      const results = probabilityCalculator.calculateProbabilities(
-        datasets,
-        selectedDate
-      );
-
-      setAnalysis(results);
-      
-      // Cache the results
-      await cacheManager.cacheData(
-        selectedLocation,
-        { start: new Date(selectedDate.getFullYear() - 20, 0, 1), end: new Date() },
-        datasets[0]
-      );
-      
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Analysis failed');
-      console.error('❌ Analysis error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      setError(`❌ Data fetch failed: ${errorMessage}\n\nPossible issues:\n• Authentication expired (re-login above)\n• NASA servers temporarily unavailable\n• Location outside GLDAS coverage area`);
+      console.error('Analysis error:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const getConditionIcon = (type: string) => {
-    switch (type) {
-      case 'veryHot': return Thermometer;
-      case 'veryCold': return Thermometer;
-      case 'veryWet': return Droplets;
-      case 'veryWindy': return Wind;
-      case 'veryUncomfortable': return Sun;
-      default: return Cloud;
+  useEffect(() => {
+    if (selectedLocation && selectedDate && nasaAuthService.isAuthenticated() && !isLoading) {
+      performAnalysis();
     }
-  };
-
-  const getConditionColor = (type: string) => {
-    switch (type) {
-      case 'veryHot': return '#ff6b6b';
-      case 'veryCold': return '#42a5f5';
-      case 'veryWet': return '#29b6f6';
-      case 'veryWindy': return '#78909c';
-      case 'veryUncomfortable': return '#ff7043';
-      default: return '#6b7280';
-    }
-  };
+  }, [selectedLocation, selectedDate]);
 
   return (
     <div className="weather-analyzer">
-      <div className="analyzer-header">
-        <motion.h1 
-          className="analyzer-title"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          Will It Rain On My Parade?
-        </motion.h1>
-        <motion.p 
-          className="analyzer-subtitle"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          NASA-powered weather probability analysis based on 20+ years of satellite data
-        </motion.p>
-      </div>
+      <motion.div
+        className="analyzer-header"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <h1>Weather Probability Analysis</h1>
+        <p style={{ fontSize: '0.875rem', opacity: 0.8, marginTop: '0.5rem' }}>
+          Powered by NASA GLDAS satellite data
+        </p>
+      </motion.div>
 
-      <div className="control-grid">
-        <div className="control-section">
-          <div className="control-header">
-            <MapPin className="control-icon" size={24} />
-            <h3>Select Location</h3>
-          </div>
+      <div className="input-section" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.1 }}
+        >
           <LocationPicker
             selectedLocation={selectedLocation}
             onLocationSelect={handleLocationSelect}
           />
-        </div>
+        </motion.div>
 
-        <div className="control-section">
-          <div className="control-header">
-            <Calendar className="control-icon" size={24} />
-            <h3>Select Date</h3>
-          </div>
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+        >
           <DatePicker
             selectedDate={selectedDate}
             onDateSelect={handleDateSelect}
           />
-        </div>
+        </motion.div>
       </div>
 
-      {/* Loading indicator with NASA data fetching progress */}
+      {!nasaAuthService.isAuthenticated() && (
+        <div style={{
+          padding: '1rem',
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '2px solid rgba(239, 68, 68, 0.3)',
+          borderRadius: '8px',
+          marginBottom: '1rem',
+          color: '#ef4444'
+        }}>
+          ⚠️ Please authenticate with NASA Earthdata above before selecting a location
+        </div>
+      )}
+
       <AnimatePresence>
         {isLoading && (
-          <LoadingIndicator 
-            progress={loadingProgress}
-            title="Fetching NASA Satellite Data"
-          />
+          <motion.div
+            className="loading-section glass-card"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            style={{ padding: '2rem', marginBottom: '2rem' }}
+          >
+            <h3 style={{ marginBottom: '1rem' }}>
+              <Satellite className="inline" style={{ marginRight: '0.5rem' }} />
+              Processing NASA Data
+            </h3>
+            <div style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
+              {loadingProgress.map((msg, i) => (
+                <div key={i} style={{ marginBottom: '0.5rem', opacity: 0.9 }}>
+                  {msg}
+                </div>
+              ))}
+              {isLoading && (
+                <div style={{ marginTop: '1rem' }}>
+                  <div className="spinner">⏳</div> Please wait...
+                </div>
+              )}
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Error display */}
       {error && (
-        <motion.div 
-          className="error-message glass-surface"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          style={{
+            padding: '1.5rem',
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '2px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '12px',
+            marginBottom: '2rem',
+            whiteSpace: 'pre-line'
+          }}
         >
-          <p>❌ {error}</p>
-          <motion.button 
-            className="clay-button primary"
-            onClick={performAnalysis}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            Retry Analysis
-          </motion.button>
+          {error}
         </motion.div>
       )}
 
-      {/* Results display */}
       <AnimatePresence>
         {analysis && !isLoading && (
-          <motion.div 
+          <motion.div
             className="analysis-results"
-            initial={{ opacity: 0, y: 40 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -40 }}
+            exit={{ opacity: 0 }}
           >
-            <div className="results-header clay-surface">
-              <h2>Weather Probability Analysis Results</h2>
-              <div className="results-meta">
-                <span>
-                  <MapPin size={16} />
-                  {selectedLocation?.lat.toFixed(4)}°, {selectedLocation?.lng.toFixed(4)}°
-                </span>
-                <span>
-                  <Calendar size={16} />
-                  {selectedDate.toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
-                  })}
-                </span>
-                <span>
-                  <Satellite size={16} />
-                  {analysis.historicalContext.dataYears} years of NASA data
-                </span>
-                <span>
-                  <Database size={16} />
-                  {analysis.historicalContext.totalDataPoints} data points analyzed
-                </span>
-              </div>
-            </div>
+            <div className="results-header glass-card" style={{ padding: '2rem', marginBottom: '2rem' }}>
+              <h2 style={{ marginBottom: '1rem' }}>
+                <Database className="inline" style={{ marginRight: '0.5rem' }} />
+                NASA Satellite Data Retrieved
+              </h2>
 
-            <div className="probability-grid">
-              {Object.entries(analysis.probabilities).map(([key, result]) => {
-                const Icon = getConditionIcon(key);
-                const color = getConditionColor(key);
-                
-                return (
-                  <ProbabilityCard
-                    key={key}
-                    condition={{
-                      type: key as any,
-                      label: key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()),
-                      probability: result.probability,
-                      confidence: result.confidence,
-                      threshold: result.threshold,
-                      historicalOccurrences: result.historicalOccurrences
-                    }}
-                    icon={Icon}
-                    color={color}
-                  />
-                );
-              })}
-            </div>
-
-            {/* Data Quality and Historical Context */}
-            <div className="quality-metrics clay-surface">
-              <h3>Data Quality & Historical Context</h3>
-              <div className="quality-grid">
-                <div className="quality-metric">
-                  <span className="metric-label">Data Completeness</span>
-                  <div className="metric-bar">
-                    <motion.div 
-                      className="metric-fill"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${analysis.dataQuality.completeness}%` }}
-                      transition={{ duration: 1, delay: 0.5 }}
-                    />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem', marginTop: '1.5rem' }}>
+                <div className="stat-card clay-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#3b82f6' }}>
+                    {analysis.statistics.totalDataPoints.toLocaleString()}
                   </div>
-                  <span className="metric-value">{Math.round(analysis.dataQuality.completeness)}%</span>
+                  <div style={{ fontSize: '0.875rem', opacity: 0.7, marginTop: '0.5rem' }}>
+                    Total Data Points
+                  </div>
                 </div>
-                
-                <div className="quality-metric">
-                  <span className="metric-label">Data Reliability</span>
-                  <div className="metric-bar">
-                    <motion.div 
-                      className="metric-fill"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${analysis.dataQuality.reliability}%` }}
-                      transition={{ duration: 1, delay: 0.7 }}
-                    />
+
+                <div className="stat-card clay-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#10b981' }}>
+                    {analysis.statistics.avgTemperature.toFixed(1)}°C
                   </div>
-                  <span className="metric-value">{Math.round(analysis.dataQuality.reliability)}%</span>
+                  <div style={{ fontSize: '0.875rem', opacity: 0.7, marginTop: '0.5rem' }}>
+                    Average Temperature
+                  </div>
+                </div>
+
+                <div className="stat-card clay-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: '#06b6d4' }}>
+                    {analysis.statistics.avgPrecipitation.toFixed(2)} mm
+                  </div>
+                  <div style={{ fontSize: '0.875rem', opacity: 0.7, marginTop: '0.5rem' }}>
+                    Average Precipitation
+                  </div>
                 </div>
               </div>
-              
-              <div className="data-sources">
-                <h4>NASA Data Sources</h4>
-                <div className="sources-list">
-                  {analysis.dataQuality.sources.map((source, index) => (
-                    <span key={index} className="source-tag">
-                      {source}
-                    </span>
+
+              <div style={{ marginTop: '2rem', padding: '1rem', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '8px' }}>
+                <h4 style={{ marginBottom: '0.5rem', color: '#10b981' }}>✅ Real NASA GLDAS Data</h4>
+                <p style={{ fontSize: '0.875rem', opacity: 0.8 }}>
+                  Data range: {analysis.quality.dateRange.start.toLocaleDateString()} to {analysis.quality.dateRange.end.toLocaleDateString()}
+                </p>
+                <p style={{ fontSize: '0.875rem', opacity: 0.8 }}>
+                  Quality: {analysis.quality.completeness}% complete • {analysis.quality.dataPoints} points analyzed
+                </p>
+              </div>
+
+              <details style={{ marginTop: '1.5rem' }}>
+                <summary style={{ cursor: 'pointer', fontWeight: '600', marginBottom: '1rem' }}>
+                  📊 View Sample Data
+                </summary>
+                <div style={{ fontFamily: 'monospace', fontSize: '0.875rem', background: 'rgba(0, 0, 0, 0.05)', padding: '1rem', borderRadius: '8px' }}>
+                  <strong>Sample Temperature Values:</strong>
+                  {analysis.sampleData.temperature.map((p: any, i: number) => (
+                    <div key={i}>
+                      {p.date.toLocaleDateString()}: {p.value.toFixed(2)}°C
+                    </div>
+                  ))}
+                  <br />
+                  <strong>Sample Precipitation Values:</strong>
+                  {analysis.sampleData.precipitation.map((p: any, i: number) => (
+                    <div key={i}>
+                      {p.date.toLocaleDateString()}: {p.value.toFixed(2)} mm/hour
+                    </div>
                   ))}
                 </div>
-              </div>
+              </details>
+            </div>
 
-              <div className="historical-context">
-                <h4>Historical Context</h4>
-                <div className="context-grid">
-                  <div className="context-item">
-                    <Thermometer size={20} />
-                    <span className="context-value">
-                      {analysis.historicalContext.averageConditions.temperature.toFixed(1)}°C
-                    </span>
-                    <span className="context-label">Average Temperature</span>
-                  </div>
-                  <div className="context-item">
-                    <Droplets size={20} />
-                    <span className="context-value">
-                      {analysis.historicalContext.averageConditions.precipitation.toFixed(1)}mm
-                    </span>
-                    <span className="context-label">Average Precipitation</span>
-                  </div>
-                  <div className="context-item">
-                    <Wind size={20} />
-                    <span className="context-value">
-                      {analysis.historicalContext.averageConditions.windSpeed.toFixed(1)}m/s
-                    </span>
-                    <span className="context-label">Average Wind Speed</span>
-                  </div>
-                </div>
-              </div>
+            <div style={{ padding: '1rem', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '8px', fontSize: '0.875rem' }}>
+              <strong>ℹ️ Next Step:</strong> This real NASA data will be used for probability calculations (coming soon)
             </div>
           </motion.div>
         )}
