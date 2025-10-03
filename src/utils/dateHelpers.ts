@@ -19,9 +19,12 @@ export function buildGLDASUrl(date: Date, hour: number): string {
   const dateStr = formatYYYYMMDD(date);
   const hourStr = String(hour).padStart(2, '0') + '00';
   
+  // Use OPeNDAP service with ASCII output
+  const baseUrl = 'https://hydro1.gesdisc.eosdis.nasa.gov/opendap/GLDAS/GLDAS_NOAH025_3H.2.1';
   const filename = `GLDAS_NOAH025_3H.A${dateStr}.${hourStr}.021.nc4`;
   
-  return `https://hydro1.gesdisc.eosdis.nasa.gov/data/GLDAS/GLDAS_NOAH025_3H.2.1/${year}/${doy}/${filename}`;
+  // Request ASCII format with specific variables
+  return `${baseUrl}/${year}/${doy}/${filename}.ascii?Tair_f_inst,Rainf_f_tavg,Qair_f_inst,Wind_f_inst,lat,lon,time`;
 }
 
 export function getUrlsForDateRange(startDate: Date, endDate: Date): string[] {

@@ -5,8 +5,6 @@ export interface FormData {
   longitude: number;
   startDate: Date;
   endDate: Date;
-  username: string;
-  password: string;
 }
 
 interface InputFormProps {
@@ -19,8 +17,6 @@ export function InputForm({ onSubmit, loading = false }: InputFormProps) {
   const [longitude, setLongitude] = useState('-100.0');
   const [startDate, setStartDate] = useState('2023-07-04');
   const [endDate, setEndDate] = useState('2023-07-06');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -40,11 +36,6 @@ export function InputForm({ onSubmit, loading = false }: InputFormProps) {
       return;
     }
 
-    if (!username || !password) {
-      setError('NASA Earthdata credentials are required');
-      return;
-    }
-
     const start = new Date(startDate);
     const end = new Date(endDate);
 
@@ -55,7 +46,7 @@ export function InputForm({ onSubmit, loading = false }: InputFormProps) {
 
     const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     if (daysDiff > 30) {
-      setError('Date range cannot exceed 30 days to ensure reasonable processing time');
+      setError('Date range cannot exceed 30 days');
       return;
     }
 
@@ -63,20 +54,16 @@ export function InputForm({ onSubmit, loading = false }: InputFormProps) {
       latitude: lat,
       longitude: lon,
       startDate: start,
-      endDate: end,
-      username,
-      password
+      endDate: end
     });
   };
 
   return (
     <div className="input-form">
-      {/* Card Header */}
       <div className="card-header">
-        <h2>⚙️ Configure Data Extraction</h2>
+        <h2>⚙️ Extract Weather Data</h2>
       </div>
 
-      {/* Card Body */}
       <div className="card-body">
         {error && (
           <div className="error">
@@ -86,7 +73,6 @@ export function InputForm({ onSubmit, loading = false }: InputFormProps) {
 
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
-            {/* Location Section */}
             <div className="form-group">
               <label>📍 Latitude</label>
               <input
@@ -113,7 +99,6 @@ export function InputForm({ onSubmit, loading = false }: InputFormProps) {
               />
             </div>
 
-            {/* Date Range Section */}
             <div className="form-group">
               <label>📅 Start Date</label>
               <input
@@ -139,45 +124,18 @@ export function InputForm({ onSubmit, loading = false }: InputFormProps) {
                 required
               />
             </div>
-
-            {/* NASA Credentials Section */}
-            <div className="form-group">
-              <label>👤 NASA Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Your Earthdata username"
-                disabled={loading}
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label>🔒 NASA Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Your Earthdata password"
-                disabled={loading}
-                required
-              />
-            </div>
           </div>
 
-          {/* Submit Button */}
           <button type="submit" disabled={loading} className="btn-primary">
             {loading ? '⏳ Fetching Data...' : '🚀 Extract Weather Data'}
           </button>
 
-          {/* Help Text */}
           <div className="help-text">
             <p>
-              📚 Need NASA Earthdata credentials? <a href="https://urs.earthdata.nasa.gov" target="_blank" rel="noopener noreferrer">Register for free</a>
+              🌍 Enter any location coordinates worldwide (GLDAS global coverage)
             </p>
             <p style={{ marginTop: '0.5rem' }}>
-              ⚠️ After registering, approve the <strong>GES DISC DATA ARCHIVE</strong> application in your Earthdata profile
+              📊 Data from NASA's Global Land Data Assimilation System (2000-present)
             </p>
           </div>
         </form>

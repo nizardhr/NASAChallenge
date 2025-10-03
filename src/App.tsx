@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { InputForm, FormData } from './components/InputForm';
 import { getUrlsForDateRange } from './utils/dateHelpers';
-import { parseNetCDFFile, WeatherDataPoint } from './utils/netcdfParser';
+import { parseASCIIData, WeatherDataPoint } from './utils/asciiParser';
 import { generateCSV } from './utils/csvGenerator';
 import './index.css';
 
@@ -29,9 +29,8 @@ function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            url: urls[i],
-            username: formData.username,
-            password: formData.password
+            url: urls[i]
+            // No credentials needed - server uses token
           })
         });
 
@@ -48,7 +47,7 @@ function App() {
 
         setProgress(`Processing file ${i + 1} of ${urls.length}...`);
         
-        const fileData = parseNetCDFFile(
+        const fileData = parseASCIIData(
           result.data,
           formData.latitude,
           formData.longitude
@@ -56,7 +55,7 @@ function App() {
 
         allData.push(...fileData);
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
       allData.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
@@ -86,16 +85,13 @@ function App() {
 
   return (
     <div className="app">
-      {/* Header */}
       <div className="app-header">
         <h1>🛰️ NASA GLDAS Data Extractor</h1>
         <p>Extract historical weather data from NASA's Global Land Data Assimilation System</p>
       </div>
 
-      {/* Input Form */}
       <InputForm onSubmit={handleFetchData} loading={loading} />
 
-      {/* Loading State */}
       {loading && (
         <div className="loading">
           <div className="loading-spinner"></div>
@@ -103,20 +99,17 @@ function App() {
         </div>
       )}
 
-      {/* Error State */}
       {error && (
         <div className="error">
           <p>{error}</p>
         </div>
       )}
 
-      {/* Success State with Results */}
       {data.length > 0 && (
         <div className="results">
           <h3>📊 Extracted Weather Data</h3>
-          <p className="results-count">Total: {data.length} data points extracted successfully</p>
+          <p className="results-count">Total: {data.length} data points</p>
 
-          {/* Data Table */}
           <div className="table-container">
             <table>
               <thead>
@@ -146,7 +139,6 @@ function App() {
             <p className="results-count">Showing first 20 of {data.length} records</p>
           )}
 
-          {/* Download Button */}
           <button className="download-btn" onClick={handleDownloadCSV}>
             📥 Download Complete CSV ({data.length} records)
           </button>
