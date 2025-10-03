@@ -58,6 +58,83 @@ app.get('/api/health', (req, res) => {
     }
   });
 });
+// Test NASA Authentication endpoint
+app.post('/api/test-nasa-auth', async (req, res) => {
+  console.log('\n🧪 ========================================');
+  console.log(' TESTING NASA AUTHENTICATION');
+  console.log('========================================');
+
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({
+      error: 'Missing credentials',
+      message: 'Username and password are required'
+    });
+  }
+
+  try {
+    // Test with the GES DISC homepage
+    const testUrl = 'https://hydro1.gesdisc.eosdis.nasa.gov/data/GLDAS/';
+    const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+
+    console.log('🔍 Testing authentication with GES DISC...');
+
+    const response = await fetch(testUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'User-Agent': 'Auth-Test/1.0'
+      },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10000)
+    });
+
+    console.log('📊 Response Status:', response.status);
+
+    if (response.status === 200) {
+      return res.json({
+        success: true,
+        message: 'Authentication successful! Your credentials work.',
+        status: 200
+      });
+    } else if (response.status === 401) {
+      return res.json({
+        success: false,
+        message: 'Invalid username or password. Please check your NASA Earthdata credentials.',
+        status: 401,
+        hint: 'Try logging in at https://urs.earthdata.nasa.gov to verify your credentials'
+      });
+    } else if (response.status === 403) {
+      return res.json({
+        success: false,
+        message: 'Access forbidden. You need to approve the GES DISC DATA ARCHIVE application.',
+        status: 403,
+        hint: 'Visit https://urs.earthdata.nasa.gov/profile and approve "NASA GESDISC DATA ARCHIVE"'
+      });
+    } else if (response.status === 302 || response.status === 301) {
+      return res.json({
+        success: false,
+        message: 'Authentication redirect detected. This suggests credentials are not being accepted.',
+        status: response.status,
+        hint: 'You may need to approve the GES DISC application at https://urs.earthdata.nasa.gov/profile'
+      });
+    } else {
+      return res.json({
+        success: false,
+        message: `Unexpected response: ${response.status} ${response.statusText}`,
+        status: response.status
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Test failed:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 // ============================================================================
 // GENERAL NASA PROXY ENDPOINT
