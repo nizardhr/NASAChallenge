@@ -280,6 +280,10 @@ app.post('/api/nasa-proxy', async (req, res) => {
 // GLDAS FILE DOWNLOAD ENDPOINT
 // ============================================================================
 
+// ============================================================================
+// GLDAS FILE DOWNLOAD ENDPOINT (WITH COMPLETE NASA OAUTH FLOW)
+// ============================================================================
+
 app.post('/api/download-gldas', async (req, res) => {
   console.log('\n📥 ========================================');
   console.log(' GLDAS FILE DOWNLOAD REQUEST');
@@ -290,99 +294,146 @@ app.post('/api/download-gldas', async (req, res) => {
   console.log('📋 Request Details:');
   console.log('   URL:', url ? url.substring(0, 100) + '...' : 'missing');
   console.log('   Username:', username ? '***' + username.slice(-3) : 'missing');
-  console.log('   Password:', password ? '***' : 'missing');
 
-  // Validate inputs
   if (!url || !username || !password) {
-    console.error('❌ Missing required fields');
     return res.status(400).json({ 
       success: false,
-      error: 'Missing required fields',
-      message: 'URL, username, and password are required'
+      error: 'Missing required fields'
     });
   }
 
-  // Validate URL is NASA domain
   if (!url.includes('gesdisc.eosdis.nasa.gov')) {
-    console.error('❌ Invalid URL domain:', url);
     return res.status(400).json({ 
       success: false,
-      error: 'Invalid URL',
-      message: 'Only NASA GES DISC URLs are allowed'
+      error: 'Invalid URL'
     });
   }
 
   try {
-    console.log('🚀 Downloading from NASA...');
-
-    // Create Basic Auth header
-    const credentials = Buffer.from(`${username}:${password}`).toString('base64');
-
+    console.log('🚀 Starting NASA OAuth authentication flow...');
     const startTime = Date.now();
 
-    // Download from NASA
-    const nasaResponse = await fetch(url, {
+    // Step 1: Initial request
+    console.log('📍 Step 1: Initial request...');
+    const step1Response = await fetch(url, {
+      method: 'GET',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10000)
+    });
+
+    console.log('   Status:', step1Response.status);
+
+    if (step1Response.status !== 302 && step1Response.status !== 301) {
+      throw new Error(`Expected redirect, got ${step1Response.status}`);
+    }
+
+    const authUrl = step1Response.headers.get('location');
+    console.log('📍 Step 2: Auth URL received');
+
+    // Step 2: Authenticate
+    const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+    const step2Response = await fetch(authUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Basic ${credentials}`,
-        'User-Agent': 'GLDAS-Downloader/1.0',
-        'Accept': '*/*'
+        'User-Agent': 'GLDAS-Downloader/1.0'
       },
-      signal: AbortSignal.timeout(60000) // 60 seconds
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10000)
+    });
+
+    console.log('   Auth status:', step2Response.status);
+
+    if (step2Response.status === 401) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials'
+      });
+    }
+
+    // Get ALL cookies
+    const allCookies = [];
+    const setCookieHeaders = step2Response.headers.raw()['set-cookie'];
+    if (setCookieHeaders) {
+      allCookies.push(...setCookieHeaders);
+    }
+
+    console.log('   Cookies from auth:', allCookies.length);
+
+    // Step 3: Follow redirect to data-redirect
+    const redirectUrl = step2Response.headers.get('location');
+    console.log('📍 Step 3: Data redirect URL received');
+
+    let cookieString = allCookies
+      .map(cookie => cookie.split(';')[0])
+      .join('; ');
+
+    const step3Response = await fetch(redirectUrl, {
+      method: 'GET',
+      headers: {
+        'Cookie': cookieString,
+        'User-Agent': 'GLDAS-Downloader/1.0'
+      },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(10000)
+    });
+
+    console.log('   Data redirect status:', step3Response.status);
+
+    // Collect more cookies
+    const moreCookies = step3Response.headers.raw()['set-cookie'];
+    if (moreCookies) {
+      allCookies.push(...moreCookies);
+      cookieString = allCookies
+        .map(cookie => cookie.split(';')[0])
+        .join('; ');
+      console.log('   Total cookies now:', allCookies.length);
+    }
+
+    // Step 4: Follow final redirect to actual file
+    const finalUrl = step3Response.headers.get('location') || url;
+    console.log('📍 Step 4: Downloading file...');
+
+    const finalResponse = await fetch(finalUrl, {
+      method: 'GET',
+      headers: {
+        'Cookie': cookieString,
+        'User-Agent': 'GLDAS-Downloader/1.0'
+      },
+      redirect: 'follow', // Follow any remaining redirects
+      signal: AbortSignal.timeout(60000)
     });
 
     const responseTime = Date.now() - startTime;
 
-    console.log('📊 NASA Response:');
-    console.log('   Status:', nasaResponse.status);
-    console.log('   Status Text:', nasaResponse.statusText);
+    console.log('📊 Final Response:');
+    console.log('   Status:', finalResponse.status);
     console.log('   Time:', responseTime, 'ms');
-    console.log('   Content-Type:', nasaResponse.headers.get('content-type'));
+    console.log('   Content-Type:', finalResponse.headers.get('content-type'));
 
-    // Handle authentication errors
-    if (nasaResponse.status === 401) {
-      console.error('❌ Authentication failed (401)');
-      return res.status(401).json({
+    if (!finalResponse.ok) {
+      if (finalResponse.status === 401) {
+        console.error('❌ Still unauthorized after full OAuth flow');
+        console.error('   This usually means the session cookies are not being preserved correctly');
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication failed',
+          message: 'Could not establish authenticated session with NASA. Your credentials are correct but the OAuth flow failed.'
+        });
+      }
+
+      return res.status(finalResponse.status).json({
         success: false,
-        error: 'Authentication failed',
-        message: 'Invalid NASA Earthdata credentials. Please check your username and password.'
+        error: `Download failed with status ${finalResponse.status}`
       });
     }
 
-    if (nasaResponse.status === 403) {
-      console.error('❌ Access forbidden (403)');
-      return res.status(403).json({
-        success: false,
-        error: 'Access forbidden',
-        message: 'You need to approve the GES DISC DATA ARCHIVE application at https://urs.earthdata.nasa.gov'
-      });
-    }
-
-    if (nasaResponse.status === 404) {
-      console.error('❌ File not found (404)');
-      return res.status(404).json({
-        success: false,
-        error: 'File not found',
-        message: 'The requested GLDAS file does not exist. Check your date range.'
-      });
-    }
-
-    if (!nasaResponse.ok) {
-      console.error('❌ NASA returned error:', nasaResponse.status);
-      return res.status(nasaResponse.status).json({
-        success: false,
-        error: `NASA returned ${nasaResponse.status}`,
-        message: nasaResponse.statusText
-      });
-    }
-
-    // Get binary data
-    const buffer = await nasaResponse.arrayBuffer();
+    // Success! Get the data
+    const buffer = await finalResponse.arrayBuffer();
     const base64 = Buffer.from(buffer).toString('base64');
 
     console.log('✅ Download successful!');
-    console.log('   File size:', buffer.byteLength, 'bytes');
-    console.log('   Base64 size:', base64.length, 'characters\n');
+    console.log('   File size:', buffer.byteLength, 'bytes\n');
 
     return res.status(200).json({
       success: true,
@@ -396,22 +447,18 @@ app.post('/api/download-gldas', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Download Error:', error);
-    console.error('   Error Name:', error.name);
-    console.error('   Error Message:', error.message, '\n');
+    console.error('❌ Error:', error.message, '\n');
 
     if (error.name === 'AbortError' || error.name === 'TimeoutError') {
       return res.status(504).json({ 
         success: false,
-        error: 'Request timeout',
-        message: 'The file download took too long. The file may be too large or the server is slow. Please try again.'
+        error: 'Timeout'
       });
     }
 
     return res.status(500).json({
       success: false,
-      error: 'Download failed',
-      message: error.message
+      error: error.message
     });
   }
 });
