@@ -3,6 +3,7 @@ import { InputForm, FormData } from './components/InputForm';
 import { getUrlsForDateRange } from './utils/dateHelpers';
 import { parseNetCDFFile, WeatherDataPoint } from './utils/netcdfParser';
 import { generateCSV } from './utils/csvGenerator';
+import './index.css';
 
 function App() {
   const [loading, setLoading] = useState(false);
@@ -16,18 +17,15 @@ function App() {
     setData([]);
 
     try {
-      // Step 1: Get list of URLs
       const urls = getUrlsForDateRange(formData.startDate, formData.endDate);
       setProgress(`Found ${urls.length} files to download...`);
 
       const allData: WeatherDataPoint[] = [];
 
-      // Step 2: Download and process each file
       for (let i = 0; i < urls.length; i++) {
         setProgress(`Downloading file ${i + 1} of ${urls.length}...`);
 
-        // Download through proxy
-        const response = await fetch('http://localhost:3001/api/download-gldas', {
+        const response = await fetch('/api/download-gldas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -38,16 +36,16 @@ function App() {
         });
 
         if (!response.ok) {
-          throw new Error(`Download failed: ${response.status}`);
+          const errorData = await response.json();
+          throw new Error(errorData.message || errorData.error || `HTTP ${response.status}`);
         }
 
         const result = await response.json();
 
         if (!result.success) {
-          throw new Error(result.error || 'Download failed');
+          throw new Error(result.message || result.error || 'Download failed');
         }
 
-        // Step 3: Parse NetCDF file
         setProgress(`Processing file ${i + 1} of ${urls.length}...`);
         
         const fileData = parseNetCDFFile(
@@ -58,18 +56,18 @@ function App() {
 
         allData.push(...fileData);
 
-        // Small delay to avoid overwhelming server
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
-      // Step 4: Sort by timestamp
       allData.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
       setData(allData);
-      setProgress(`Complete! Extracted ${allData.length} data points.`);
+      setProgress('');
 
     } catch (err: any) {
-      setError(err.message);
+      console.error('Error:', err);
+      setError(err.message || 'An error occurred while fetching data');
+      setProgress('');
     } finally {
       setLoading(false);
     }
@@ -81,50 +79,77 @@ function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `gldas_data_${Date.now()}.csv`;
+    a.download = `gldas_weather_data_${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
     <div className="app">
-      <InputForm onSubmit={handleFetchData} />
+      {/* Header */}
+      <div className="app-header">
+        <h1>🛰️ NASA GLDAS Data Extractor</h1>
+        <p>Extract historical weather data from NASA's Global Land Data Assimilation System</p>
+      </div>
 
-      {loading && <div className="loading">{progress}</div>}
-      {error && <div className="error">{error}</div>}
+      {/* Input Form */}
+      <InputForm onSubmit={handleFetchData} loading={loading} />
 
+      {/* Loading State */}
+      {loading && (
+        <div className="loading">
+          <div className="loading-spinner"></div>
+          <p>{progress}</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="error">
+          <p>{error}</p>
+        </div>
+      )}
+
+      {/* Success State with Results */}
       {data.length > 0 && (
         <div className="results">
-          <h3>Results ({data.length} records)</h3>
-          
-          <table>
-            <thead>
-              <tr>
-                <th>Date/Time</th>
-                <th>Temperature (°C)</th>
-                <th>Precipitation (mm/hr)</th>
-                <th>Humidity (%)</th>
-                <th>Wind Speed (m/s)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.slice(0, 10).map((point, i) => (
-                <tr key={i}>
-                  <td>{point.timestamp.toLocaleString()}</td>
-                  <td>{point.temperature.toFixed(1)}</td>
-                  <td>{point.precipitation.toFixed(2)}</td>
-                  <td>{point.humidity.toFixed(1)}</td>
-                  <td>{point.windSpeed.toFixed(1)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h3>📊 Extracted Weather Data</h3>
+          <p className="results-count">Total: {data.length} data points extracted successfully</p>
 
-          {data.length > 10 && (
-            <p>Showing first 10 of {data.length} records</p>
+          {/* Data Table */}
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date/Time</th>
+                  <th>Temperature (°C)</th>
+                  <th>Precipitation (mm/hr)</th>
+                  <th>Humidity (%)</th>
+                  <th>Wind Speed (m/s)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.slice(0, 20).map((point, i) => (
+                  <tr key={i}>
+                    <td>{point.timestamp.toLocaleString()}</td>
+                    <td>{point.temperature.toFixed(1)}</td>
+                    <td>{point.precipitation.toFixed(2)}</td>
+                    <td>{point.humidity.toFixed(1)}</td>
+                    <td>{point.windSpeed.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {data.length > 20 && (
+            <p className="results-count">Showing first 20 of {data.length} records</p>
           )}
 
-          <button onClick={handleDownloadCSV}>Download Complete CSV</button>
+          {/* Download Button */}
+          <button className="download-btn" onClick={handleDownloadCSV}>
+            📥 Download Complete CSV ({data.length} records)
+          </button>
         </div>
       )}
     </div>

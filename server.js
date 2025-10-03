@@ -1,148 +1,192 @@
+/**
+ * ============================================================================
+ * NASA PROXY SERVER - LOCAL DEVELOPMENT
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Backend proxy server that handles authentication and downloads from NASA
+ * GES DISC servers, bypassing CORS restrictions.
+ * 
+ * ENDPOINTS:
+ * - POST /api/nasa-proxy - General NASA API proxy
+ * - POST /api/download-gldas - GLDAS file download endpoint
+ * - GET /api/health - Health check endpoint
+ * 
+ * ============================================================================
+ */
+
 import express from 'express';
 import cors from 'cors';
+import fetch from 'node-fetch';
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3000;
 
 // ============================================================================
-// Middleware
+// MIDDLEWARE
 // ============================================================================
 
+// Enable CORS for all routes
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-  credentials: true,
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Parse JSON bodies
 app.use(express.json({ limit: '50mb' }));
 
+// Log all requests
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   next();
 });
 
 // ============================================================================
-// Routes
+// HEALTH CHECK ENDPOINT
 // ============================================================================
 
-// Health check endpoint
 app.get('/api/health', (req, res) => {
-  console.log('✅ Health check requested');
   res.json({
     status: 'healthy',
-    service: 'NASA Proxy Server',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    endpoints: {
+      'POST /api/nasa-proxy': 'General NASA API proxy',
+      'POST /api/download-gldas': 'GLDAS file downloads',
+      'GET /api/health': 'Health check'
+    }
   });
 });
 
-// NASA Proxy endpoint
+// ============================================================================
+// GENERAL NASA PROXY ENDPOINT
+// ============================================================================
+
 app.post('/api/nasa-proxy', async (req, res) => {
   console.log('\n📡 ========================================');
-  console.log(' NASA PROXY REQUEST RECEIVED');
+  console.log(' NASA PROXY REQUEST');
   console.log('========================================');
 
+  const { url, username, password } = req.body;
+
+  console.log('📋 Request Details:');
+  console.log('   URL:', url ? url.substring(0, 100) + '...' : 'missing');
+  console.log('   Username:', username ? '***' + username.slice(-3) : 'missing');
+  console.log('   Password:', password ? '***' : 'missing');
+
+  // Validate inputs
+  if (!url || !username || !password) {
+    console.error('❌ Missing required fields');
+    return res.status(400).json({ 
+      error: 'Missing required fields',
+      message: 'URL, username, and password are required'
+    });
+  }
+
+  // Validate URL is NASA domain
+  if (!url.includes('gesdisc.eosdis.nasa.gov')) {
+    console.error('❌ Invalid URL domain:', url);
+    return res.status(400).json({ 
+      error: 'Invalid URL',
+      message: 'Only NASA GES DISC URLs are allowed'
+    });
+  }
+
   try {
-    const { url, username, password } = req.body;
-
-    console.log('📋 Request Details:');
-    console.log(' URL:', url ? url.substring(0, 80) + '...' : 'MISSING');
-    console.log(' Username:', username ? '***' + username.slice(-3) : 'MISSING');
-    console.log(' Password:', password ? '***' : 'MISSING');
-
-    // Validate required fields
-    if (!url) {
-      console.error('❌ Error: Missing URL');
-      return res.status(400).json({
-        error: 'Missing parameter',
-        message: 'URL is required',
-      });
-    }
-
-    if (!username || !password) {
-      console.error('❌ Error: Missing credentials');
-      return res.status(400).json({
-        error: 'Missing credentials',
-        message: 'Username and password are required',
-      });
-    }
-
-    // Validate URL domain
-    if (!url.includes('gesdisc.eosdis.nasa.gov')) {
-      console.error('❌ Error: Invalid URL domain');
-      return res.status(400).json({
-        error: 'Invalid URL',
-        message: 'Only NASA GES DISC URLs are allowed',
-      });
-    }
-
     console.log('🚀 Forwarding request to NASA...');
-    // Create Basic Auth credentials
+
+    // Create Basic Auth header
     const credentials = Buffer.from(`${username}:${password}`).toString('base64');
 
     const startTime = Date.now();
+
     // Make request to NASA
     const nasaResponse = await fetch(url, {
       method: 'GET',
       headers: {
         'Authorization': `Basic ${credentials}`,
-        'User-Agent': 'WeatherProbabilityApp-LocalProxy/1.0',
+        'User-Agent': 'NASA-Proxy/1.0',
         'Accept': 'text/plain, application/json, */*'
       },
-      signal: AbortSignal.timeout(45000) // 45 second timeout
+      signal: AbortSignal.timeout(45000) // 45 seconds
     });
 
     const responseTime = Date.now() - startTime;
-    const data = await nasaResponse.text();
 
     console.log('📊 NASA Response:');
-    console.log(' Status:', nasaResponse.status);
-    console.log(' Time:', responseTime, 'ms');
-    console.log(' Data Size:', data.length, 'bytes');
-    console.log(' Preview:', data.substring(0, 100).replace(/\n/g, ' '));
+    console.log('   Status:', nasaResponse.status);
+    console.log('   Status Text:', nasaResponse.statusText);
+    console.log('   Time:', responseTime, 'ms');
+    console.log('   Content-Type:', nasaResponse.headers.get('content-type'));
 
-    // Return response to frontend
-    if (nasaResponse.status === 200) {
-      console.log('✅ Success - Returning data to frontend\n');
-      return res.status(200).json({
-        status: 200,
-        success: true,
-        data: data,
-        metadata: {
-          responseTime: responseTime,
-          dataSize: data.length,
-          timestamp: new Date().toISOString()
-        }
-      });
-    } else if (nasaResponse.status === 401) {
-      console.error('❌ Authentication failed - Invalid credentials\n');
+    // Get response data as text
+    const data = await nasaResponse.text();
+
+    console.log('   Data Length:', data.length, 'characters');
+
+    // Handle different status codes
+    if (nasaResponse.status === 401) {
+      console.error('❌ Authentication failed (401)');
       return res.status(401).json({
         status: 401,
         success: false,
-        error: 'Invalid NASA Earthdata credentials',
-        message: 'The username or password is incorrect'
+        error: 'Authentication failed',
+        message: 'Invalid NASA Earthdata credentials'
       });
-    } else if (nasaResponse.status === 403) {
-      console.error('❌ Access forbidden\n');
+    }
+
+    if (nasaResponse.status === 403) {
+      console.error('❌ Access forbidden (403)');
       return res.status(403).json({
         status: 403,
         success: false,
         error: 'Access forbidden',
-        message: 'Your account may need additional permissions'
+        message: 'GES DISC application authorization required'
       });
-    } else {
-      console.error('❌ Unexpected status:', nasaResponse.status, '\n');
+    }
+
+    if (nasaResponse.status === 404) {
+      console.error('❌ Not found (404)');
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        error: 'Not found',
+        message: 'Requested resource not found'
+      });
+    }
+
+    if (!nasaResponse.ok) {
+      console.error('❌ NASA returned error:', nasaResponse.status);
       return res.status(nasaResponse.status).json({
         status: nasaResponse.status,
         success: false,
-        error: `NASA API error: ${nasaResponse.statusText}`,
-        message: data.substring(0, 500)
+        error: `NASA API Error (${nasaResponse.status})`,
+        message: nasaResponse.statusText
       });
     }
+
+    console.log('✅ Request successful\n');
+
+    // Return successful response
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      data: data,
+      metadata: {
+        responseTime: responseTime,
+        dataSize: data.length,
+        timestamp: new Date().toISOString()
+      }
+    });
+
   } catch (error) {
-    console.error('❌ Proxy Error:', error.name, '-', error.message, '\n');
+    console.error('❌ Proxy Error:', error);
+    console.error('   Error Name:', error.name);
+    console.error('   Error Message:', error.message, '\n');
 
     if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      return res.status(504).json({
+      return res.status(504).json({ 
         error: 'Request timeout',
         message: 'The request to NASA took too long. Please try again.'
       });
@@ -155,15 +199,165 @@ app.post('/api/nasa-proxy', async (req, res) => {
   }
 });
 
+// ============================================================================
+// GLDAS FILE DOWNLOAD ENDPOINT
+// ============================================================================
+
+app.post('/api/download-gldas', async (req, res) => {
+  console.log('\n📥 ========================================');
+  console.log(' GLDAS FILE DOWNLOAD REQUEST');
+  console.log('========================================');
+
+  const { url, username, password } = req.body;
+
+  console.log('📋 Request Details:');
+  console.log('   URL:', url ? url.substring(0, 100) + '...' : 'missing');
+  console.log('   Username:', username ? '***' + username.slice(-3) : 'missing');
+  console.log('   Password:', password ? '***' : 'missing');
+
+  // Validate inputs
+  if (!url || !username || !password) {
+    console.error('❌ Missing required fields');
+    return res.status(400).json({ 
+      success: false,
+      error: 'Missing required fields',
+      message: 'URL, username, and password are required'
+    });
+  }
+
+  // Validate URL is NASA domain
+  if (!url.includes('gesdisc.eosdis.nasa.gov')) {
+    console.error('❌ Invalid URL domain:', url);
+    return res.status(400).json({ 
+      success: false,
+      error: 'Invalid URL',
+      message: 'Only NASA GES DISC URLs are allowed'
+    });
+  }
+
+  try {
+    console.log('🚀 Downloading from NASA...');
+
+    // Create Basic Auth header
+    const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+
+    const startTime = Date.now();
+
+    // Download from NASA
+    const nasaResponse = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'User-Agent': 'GLDAS-Downloader/1.0',
+        'Accept': '*/*'
+      },
+      signal: AbortSignal.timeout(60000) // 60 seconds
+    });
+
+    const responseTime = Date.now() - startTime;
+
+    console.log('📊 NASA Response:');
+    console.log('   Status:', nasaResponse.status);
+    console.log('   Status Text:', nasaResponse.statusText);
+    console.log('   Time:', responseTime, 'ms');
+    console.log('   Content-Type:', nasaResponse.headers.get('content-type'));
+
+    // Handle authentication errors
+    if (nasaResponse.status === 401) {
+      console.error('❌ Authentication failed (401)');
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication failed',
+        message: 'Invalid NASA Earthdata credentials. Please check your username and password.'
+      });
+    }
+
+    if (nasaResponse.status === 403) {
+      console.error('❌ Access forbidden (403)');
+      return res.status(403).json({
+        success: false,
+        error: 'Access forbidden',
+        message: 'You need to approve the GES DISC DATA ARCHIVE application at https://urs.earthdata.nasa.gov'
+      });
+    }
+
+    if (nasaResponse.status === 404) {
+      console.error('❌ File not found (404)');
+      return res.status(404).json({
+        success: false,
+        error: 'File not found',
+        message: 'The requested GLDAS file does not exist. Check your date range.'
+      });
+    }
+
+    if (!nasaResponse.ok) {
+      console.error('❌ NASA returned error:', nasaResponse.status);
+      return res.status(nasaResponse.status).json({
+        success: false,
+        error: `NASA returned ${nasaResponse.status}`,
+        message: nasaResponse.statusText
+      });
+    }
+
+    // Get binary data
+    const buffer = await nasaResponse.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString('base64');
+
+    console.log('✅ Download successful!');
+    console.log('   File size:', buffer.byteLength, 'bytes');
+    console.log('   Base64 size:', base64.length, 'characters\n');
+
+    return res.status(200).json({
+      success: true,
+      data: base64,
+      fileSize: buffer.byteLength,
+      metadata: {
+        responseTime: responseTime,
+        dataSize: buffer.byteLength,
+        timestamp: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Download Error:', error);
+    console.error('   Error Name:', error.name);
+    console.error('   Error Message:', error.message, '\n');
+
+    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+      return res.status(504).json({ 
+        success: false,
+        error: 'Request timeout',
+        message: 'The file download took too long. The file may be too large or the server is slow. Please try again.'
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      error: 'Download failed',
+      message: error.message
+    });
+  }
+});
+
+// ============================================================================
+// ERROR HANDLERS
+// ============================================================================
+
 // 404 handler
 app.use((req, res) => {
+  console.log(`❌ 404: ${req.method} ${req.path} not found`);
   res.status(404).json({
     error: 'Not found',
-    message: `Route ${req.method} ${req.path} not found`
+    message: `Route ${req.method} ${req.path} not found`,
+    availableEndpoints: [
+      'POST /api/nasa-proxy',
+      'POST /api/download-gldas',
+      'GET /api/health'
+    ]
   });
 });
 
-// Error handler
+// Global error handler
 app.use((err, req, res, next) => {
   console.error('❌ Server Error:', err);
   res.status(500).json({
@@ -175,18 +369,20 @@ app.use((err, req, res, next) => {
 // ============================================================================
 // START SERVER
 // ============================================================================
+
 app.listen(PORT, () => {
   console.log('\n');
   console.log('🚀 ============================================');
-  console.log(' NASA PROXY SERVER - LOCAL DEVELOPMENT');
+  console.log('   NASA PROXY SERVER - RUNNING');
   console.log(' ============================================');
   console.log('');
-  console.log(` ✅ Server running on port: ${PORT}`);
-  console.log(` 🔗 Proxy endpoint: http://localhost:${PORT}/api/nasa-proxy`);
-  console.log(` ❤️ Health check: http://localhost:${PORT}/api/health`);
+  console.log(` ✅ Server: http://localhost:${PORT}`);
+  console.log(` 📡 NASA Proxy: POST /api/nasa-proxy`);
+  console.log(` 📥 GLDAS Downloads: POST /api/download-gldas`);
+  console.log(` ❤️  Health Check: GET /api/health`);
   console.log('');
-  console.log(' 📝 Frontend connects to: /api/nasa-proxy');
-  console.log(' 🌐 Vite dev server should run on port 5173');
+  console.log(' 📝 Make sure your frontend is configured to');
+  console.log('    connect to these endpoints.');
   console.log('');
   console.log(' Press Ctrl+C to stop the server');
   console.log('');

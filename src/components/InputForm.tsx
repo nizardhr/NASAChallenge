@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
 
-interface InputFormProps {
-  onSubmit: (data: FormData) => void;
-}
-
 export interface FormData {
   latitude: number;
   longitude: number;
@@ -13,7 +9,12 @@ export interface FormData {
   password: string;
 }
 
-export function InputForm({ onSubmit }: InputFormProps) {
+interface InputFormProps {
+  onSubmit: (data: FormData) => void;
+  loading?: boolean;
+}
+
+export function InputForm({ onSubmit, loading = false }: InputFormProps) {
   const [latitude, setLatitude] = useState('40.0');
   const [longitude, setLongitude] = useState('-100.0');
   const [startDate, setStartDate] = useState('2023-07-04');
@@ -26,7 +27,6 @@ export function InputForm({ onSubmit }: InputFormProps) {
     e.preventDefault();
     setError('');
 
-    // Validate
     const lat = parseFloat(latitude);
     const lon = parseFloat(longitude);
 
@@ -41,93 +41,147 @@ export function InputForm({ onSubmit }: InputFormProps) {
     }
 
     if (!username || !password) {
-      setError('NASA Earthdata credentials required');
+      setError('NASA Earthdata credentials are required');
+      return;
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (end < start) {
+      setError('End date must be after start date');
+      return;
+    }
+
+    const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysDiff > 30) {
+      setError('Date range cannot exceed 30 days to ensure reasonable processing time');
       return;
     }
 
     onSubmit({
       latitude: lat,
       longitude: lon,
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
+      startDate: start,
+      endDate: end,
       username,
       password
     });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="input-form">
-      <h2>GLDAS Weather Data Extractor</h2>
-      
-      {error && <div className="error">{error}</div>}
-
-      <div className="form-group">
-        <label>Latitude (-90 to 90):</label>
-        <input
-          type="number"
-          step="0.01"
-          value={latitude}
-          onChange={(e) => setLatitude(e.target.value)}
-        />
+    <div className="input-form">
+      {/* Card Header */}
+      <div className="card-header">
+        <h2>⚙️ Configure Data Extraction</h2>
       </div>
 
-      <div className="form-group">
-        <label>Longitude (-180 to 180):</label>
-        <input
-          type="number"
-          step="0.01"
-          value={longitude}
-          onChange={(e) => setLongitude(e.target.value)}
-        />
-      </div>
+      {/* Card Body */}
+      <div className="card-body">
+        {error && (
+          <div className="error">
+            <p>{error}</p>
+          </div>
+        )}
 
-      <div className="form-group">
-        <label>Start Date:</label>
-        <input
-          type="date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          min="2000-01-01"
-          max={new Date().toISOString().split('T')[0]}
-        />
-      </div>
+        <form onSubmit={handleSubmit}>
+          <div className="form-grid">
+            {/* Location Section */}
+            <div className="form-group">
+              <label>📍 Latitude</label>
+              <input
+                type="number"
+                step="0.0001"
+                value={latitude}
+                onChange={(e) => setLatitude(e.target.value)}
+                placeholder="e.g., 40.0"
+                disabled={loading}
+                required
+              />
+            </div>
 
-      <div className="form-group">
-        <label>End Date:</label>
-        <input
-          type="date"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          min={startDate}
-          max={new Date().toISOString().split('T')[0]}
-        />
-      </div>
+            <div className="form-group">
+              <label>📍 Longitude</label>
+              <input
+                type="number"
+                step="0.0001"
+                value={longitude}
+                onChange={(e) => setLongitude(e.target.value)}
+                placeholder="e.g., -100.0"
+                disabled={loading}
+                required
+              />
+            </div>
 
-      <div className="form-group">
-        <label>NASA Username:</label>
-        <input
-          type="text"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Earthdata username"
-        />
-      </div>
+            {/* Date Range Section */}
+            <div className="form-group">
+              <label>📅 Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                min="2000-01-01"
+                max={new Date().toISOString().split('T')[0]}
+                disabled={loading}
+                required
+              />
+            </div>
 
-      <div className="form-group">
-        <label>NASA Password:</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Earthdata password"
-        />
-      </div>
+            <div className="form-group">
+              <label>📅 End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                min={startDate}
+                max={new Date().toISOString().split('T')[0]}
+                disabled={loading}
+                required
+              />
+            </div>
 
-      <button type="submit">Fetch Data</button>
-      
-      <p className="help-text">
-        Need credentials? <a href="https://urs.earthdata.nasa.gov" target="_blank">Sign up at NASA Earthdata</a>
-      </p>
-    </form>
+            {/* NASA Credentials Section */}
+            <div className="form-group">
+              <label>👤 NASA Username</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Your Earthdata username"
+                disabled={loading}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>🔒 NASA Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Your Earthdata password"
+                disabled={loading}
+                required
+              />
+            </div>
+          </div>
+
+          {/* Submit Button */}
+          <button type="submit" disabled={loading} className="btn-primary">
+            {loading ? '⏳ Fetching Data...' : '🚀 Extract Weather Data'}
+          </button>
+
+          {/* Help Text */}
+          <div className="help-text">
+            <p>
+              📚 Need NASA Earthdata credentials? <a href="https://urs.earthdata.nasa.gov" target="_blank" rel="noopener noreferrer">Register for free</a>
+            </p>
+            <p style={{ marginTop: '0.5rem' }}>
+              ⚠️ After registering, approve the <strong>GES DISC DATA ARCHIVE</strong> application in your Earthdata profile
+            </p>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
