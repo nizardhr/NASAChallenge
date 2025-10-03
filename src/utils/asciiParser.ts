@@ -1,17 +1,17 @@
 /**
  * ============================================================================
- * OPeNDAP ASCII DATA PARSER (Multi-variable + Auto CSV Export)
+ * OPeNDAP ASCII DATA PARSER
  * ============================================================================
  *
  * PURPOSE:
  * Parses NASA OPeNDAP ASCII format data from GLDAS NetCDF files.
- * Converts them into structured WeatherDataPoint[] and automatically
- * downloads a CSV file in the browser after parsing.
+ * Converts them into structured WeatherDataPoint[] for accumulation.
+ * Multiple files are combined in the parent component before CSV export.
  *
- * Supports multiple variables (temperature, humidity, precipitation, etc.)
- * and both:
- *   lat[0], -59.875, -59.625, ...
- *   lat, -59.875, -59.625, ...
+ * CHANGE LOG:
+ * - Removed automatic per-file CSV download
+ * - CSV export now happens once after all files are processed
+ * - User triggers download via button click
  *
  * ============================================================================
  */
@@ -43,7 +43,13 @@ function parseNumberArray(line: string): number[] {
 
 /**
  * Main parser for OPeNDAP ASCII text.
- * Automatically exports parsed data to CSV in the browser.
+ * Returns parsed data points to be accumulated with other files.
+ * CSV export happens after all files are processed via user button click.
+ * 
+ * @param asciiText - Raw ASCII data from OPeNDAP response
+ * @param userLat - User's latitude (for logging/debugging)
+ * @param userLon - User's longitude (for logging/debugging)
+ * @returns Array of weather data points from this file
  */
 export function parseASCIIData(
   asciiText: string,
@@ -53,6 +59,10 @@ export function parseASCIIData(
   console.log("📄 Parsing OPeNDAP ASCII data...");
   console.log("   User location:", userLat, userLon);
 
+  // DEBUG: Log first 500 characters of response
+  console.log("   First 500 chars of response:");
+  console.log(asciiText.substring(0, 500));
+
   const lines = asciiText.split("\n").map(l => l.trim()).filter(l => l.length > 0);
 
   // --- Extract coordinates ---
@@ -61,12 +71,16 @@ export function parseASCIIData(
   const timeLine = findLine(lines, "time");
 
   if (!latLine || !lonLine || !timeLine) {
+    console.error("❌ Could not find coordinate arrays");
+    console.error("   Lines sample:", lines.slice(0, 20));
     throw new Error("❌ Could not find coordinate arrays (lat/lon/time) in ASCII data");
   }
 
   const lats = parseNumberArray(latLine);
   const lons = parseNumberArray(lonLine);
   const times = parseNumberArray(timeLine);
+
+  console.log(`   Coordinates: ${lats.length} lats, ${lons.length} lons, ${times.length} times`);
 
   if (lats.length === 0 || lons.length === 0 || times.length === 0) {
     throw new Error("❌ Parsed empty coordinate arrays from ASCII data");
@@ -81,9 +95,17 @@ export function parseASCIIData(
       !/^Dataset/.test(l)
   );
 
+  console.log(`   Found ${dataLines.length} data lines`);
+
   if (dataLines.length === 0) {
+    console.error("❌ No variable data found");
+    console.error("   All lines:", lines);
     throw new Error("❌ No variable data found in ASCII response");
   }
+
+  // DEBUG: Log first few data lines
+  console.log("   Sample data lines:");
+  dataLines.slice(0, 5).forEach(line => console.log("   ", line));
 
   const pointsMap: Record<string, WeatherDataPoint> = {};
   const variableNames = new Set<string>();
@@ -96,8 +118,14 @@ export function parseASCIIData(
     if (isNaN(value)) continue;
 
     // Match format: VarName[time][lat][lon]
-    const match = parts[0].match(/^(\w+)\[(\d+)\]\[(\d+)\]\[(\d+)\]/);
-    if (!match) continue;
+    // This regex now handles both formats:
+    // - Original: Tair_f_inst[0][300][200]
+    // - With subset: Tair_f_inst[0:0][399:401][319:321][0][1][2]
+    const match = parts[0].match(/^(\w+)(?:\[[\d:]+\])*\[(\d+)\]\[(\d+)\]\[(\d+)\]/);
+    if (!match) {
+      console.warn("   ⚠️ Could not parse line:", line.substring(0, 100));
+      continue;
+    }
 
     const varName = match[1];
     const timeIdx = parseInt(match[2]);
@@ -128,16 +156,24 @@ export function parseASCIIData(
   const points = Object.values(pointsMap);
   console.log(`✅ Parsed ${points.length} data points, variables: ${[...variableNames].join(", ")}`);
 
-  // --- Auto-export CSV ---
-  autoDownloadCSV(points, [...variableNames]);
+  // --- REMOVED: Auto-export CSV ---
+  // Previously, autoDownloadCSV() was called here for each file.
+  // Now, CSV export happens once after all files are combined.
+  // User clicks the download button to get the consolidated CSV.
 
   return points;
 }
 
 /**
- * Convert WeatherDataPoint[] to CSV string
+ * Convert WeatherDataPoint[] to CSV string.
+ * This function is kept for potential future use but is not called during parsing.
+ * The actual CSV generation happens in csvGenerator.ts.
+ * 
+ * @param points - Array of weather data points
+ * @param variableNames - List of variable names to include as columns
+ * @returns CSV formatted string
  */
-function toCSV(points: WeatherDataPoint[], variableNames: string[]): string {
+export function toCSV(points: WeatherDataPoint[], variableNames: string[]): string {
   const header = ["lat", "lon", "time", ...variableNames];
   const rows = points.map(p => {
     const row = [
@@ -152,10 +188,13 @@ function toCSV(points: WeatherDataPoint[], variableNames: string[]): string {
 }
 
 /**
- * Automatically download CSV in the browser.
- * Each file is saved with a unique timestamp in its name.
+ * Helper function to manually download CSV if needed.
+ * This is kept as a utility but is not automatically called.
+ * 
+ * @param points - Array of weather data points
+ * @param variableNames - List of variable names
  */
-function autoDownloadCSV(points: WeatherDataPoint[], variableNames: string[]): void {
+export function manualDownloadCSV(points: WeatherDataPoint[], variableNames: string[]): void {
   if (!points || points.length === 0) {
     console.warn("⚠️ No points to export to CSV");
     return;
@@ -184,5 +223,5 @@ function autoDownloadCSV(points: WeatherDataPoint[], variableNames: string[]): v
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 
-  console.log(`📥 CSV auto-downloaded: ${filename}`);
+  console.log(`📥 CSV manually downloaded: ${filename}`);
 }
