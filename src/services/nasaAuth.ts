@@ -371,16 +371,28 @@ export class NASAAuthService {
   // ========================================================================
 
   private buildTestUrl(): string {
-    const params = new URLSearchParams({
-      variable: 'GLDAS2:GLDAS_NOAH025_3H_v2.1:Tair_f_inst',
-      location: '40.0,-100.0',
-      startDate: '2023-01-01',
-      endDate: '2023-01-01',
-      type: 'asc2'
-    });
+  // Use Data Rods API with proper parameters format
+  const params = {
+    FILENAME: '/data/GLDAS/GLDAS_NOAH025_3H.2.1',
+    SERVICE: 'SUBSET_GLDAS',
+    VERSION: '1.02',
+    DATASET: 'GLDAS_NOAH025_3H.2.1',
+    VARIABLES: 'Tair_f_inst',
+    WEST: '-100.0',
+    EAST: '-100.0',
+    SOUTH: '40.0',
+    NORTH: '40.0',
+    STARTDATE: '2023-01-01T00:00',
+    ENDDATE: '2023-01-02T00:00',
+    FORMAT: 'bmM0Lw'
+  };
 
-    return `https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi?${params.toString()}`;
-  }
+  const queryString = Object.entries(params)
+    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+    .join('&');
+
+  return `https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/OTF/HTTP_services.cgi?${queryString}`;
+}
 
   private getSessionExpiry(): Date {
     if (!this.lastAuthTime) {
