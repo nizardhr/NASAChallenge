@@ -1,99 +1,29 @@
 /**
  * ============================================================================
- * CSV GENERATOR - CONSOLIDATED DATA EXPORT
+ * CSV GENERATOR FOR NASA GLDAS DATA
  * ============================================================================
- *
+ * 
  * PURPOSE:
- * Generates a single consolidated CSV file from all accumulated weather data.
- * Handles dynamic variable names from NASA GLDAS data.
- *
- * FEATURES:
- * - Extracts all unique variable names from the dataset
- * - Creates proper CSV headers with all available measurements
- * - Handles missing values gracefully
- * - Sorts data chronologically before export
- *
+ * Convert parsed weather data points into human-readable CSV format with
+ * proper unit conversions and meaningful column names.
+ * 
+ * CHANGE LOG:
+ * - Updated to include all 36 GLDAS NOAH variables
+ * - Added comprehensive variable mappings and unit conversions
+ * 
  * ============================================================================
  */
 
 import { WeatherDataPoint } from './asciiParser';
 
 /**
- * Generate CSV string from consolidated weather data points.
- * Automatically detects all available variables in the dataset.
- * 
- * @param data - Array of weather data points from all processed files
- * @returns CSV formatted string ready for download
- */
-export function generateCSV(data: WeatherDataPoint[]): string {
-  if (!data || data.length === 0) {
-    console.warn("⚠️ No data to export to CSV");
-    return "No data available";
-  }
-
-  console.log(`📊 Generating CSV for ${data.length} data points...`);
-
-  // --- Extract all unique variable names from the dataset ---
-  const variableNamesSet = new Set<string>();
-  
-  for (const point of data) {
-    if (point.variables) {
-      Object.keys(point.variables).forEach(varName => {
-        variableNamesSet.add(varName);
-      });
-    }
-  }
-
-  const variableNames = Array.from(variableNamesSet).sort();
-  
-  console.log(`📋 Variables found: ${variableNames.join(", ")}`);
-
-  // --- Create CSV header ---
-  const headers = [
-    "timestamp",
-    "latitude",
-    "longitude",
-    ...variableNames
-  ];
-
-  // --- Create data rows ---
-  const rows = data.map(point => {
-    const row = [
-      point.timestamp.toISOString(),
-      point.lat.toFixed(6),
-      point.lon.toFixed(6),
-      ...variableNames.map(varName => {
-        const value = point.variables[varName];
-        // Handle missing values
-        if (value === undefined || value === null || isNaN(value)) {
-          return "";
-        }
-        // Format numbers to reasonable precision
-        return value.toFixed(6);
-      })
-    ];
-    return row.join(",");
-  });
-
-  // --- Combine header and rows ---
-  const csvContent = [
-    headers.join(","),
-    ...rows
-  ].join("\n");
-
-  console.log(`✅ CSV generated: ${rows.length} rows, ${headers.length} columns`);
-
-  return csvContent;
-}
-
-/**
- * Generate CSV with human-readable column names and unit conversions.
+ * Generate human-readable CSV from weather data points.
  * This version converts NASA variable names to more user-friendly formats.
  * 
  * @param data - Array of weather data points
  * @returns CSV formatted string with converted units and readable names
  */
-export function generateHumanReadableCSV(data: WeatherDataPoint[]): string {
+export function generateCSV(data: WeatherDataPoint[]): string {
   if (!data || data.length === 0) {
     console.warn("⚠️ No data to export to CSV");
     return "No data available";
@@ -105,35 +35,200 @@ export function generateHumanReadableCSV(data: WeatherDataPoint[]): string {
     converter: (value: number) => number,
     unit: string 
   }> = {
+    // Forcing Variables
     'Tair_f_inst': { 
-      name: 'Temperature', 
-      converter: (v) => v - 273.15, // Kelvin to Celsius
+      name: 'Air_Temperature', 
+      converter: (v) => v - 273.15,
       unit: 'Celsius'
     },
     'Rainf_f_tavg': { 
-      name: 'Precipitation', 
-      converter: (v) => v * 3600, // kg/m²/s to mm/hour
+      name: 'Total_Precipitation_Rate', 
+      converter: (v) => v * 3600,
       unit: 'mm/hour'
     },
     'Qair_f_inst': { 
       name: 'Specific_Humidity', 
-      converter: (v) => v * 1000, // kg/kg to g/kg
+      converter: (v) => v * 1000,
       unit: 'g/kg'
     },
     'Wind_f_inst': { 
       name: 'Wind_Speed', 
-      converter: (v) => v, // Already in m/s
+      converter: (v) => v,
       unit: 'm/s'
     },
     'Psurf_f_inst': { 
       name: 'Surface_Pressure', 
-      converter: (v) => v / 1000, // Pa to kPa
-      unit: 'kPa'
+      converter: (v) => v,
+      unit: 'Pa'
     },
     'SWdown_f_tavg': { 
-      name: 'Solar_Radiation', 
-      converter: (v) => v, // Already in W/m²
+      name: 'Downward_Shortwave_Radiation', 
+      converter: (v) => v,
       unit: 'W/m²'
+    },
+    'LWdown_f_tavg': { 
+      name: 'Downward_Longwave_Radiation', 
+      converter: (v) => v,
+      unit: 'W/m²'
+    },
+    
+    // Energy Fluxes
+    'Swnet_tavg': { 
+      name: 'Net_Shortwave_Radiation', 
+      converter: (v) => v,
+      unit: 'W/m²'
+    },
+    'Lwnet_tavg': { 
+      name: 'Net_Longwave_Radiation', 
+      converter: (v) => v,
+      unit: 'W/m²'
+    },
+    'Qle_tavg': { 
+      name: 'Latent_Heat_Flux', 
+      converter: (v) => v,
+      unit: 'W/m²'
+    },
+    'Qh_tavg': { 
+      name: 'Sensible_Heat_Flux', 
+      converter: (v) => v,
+      unit: 'W/m²'
+    },
+    'Qg_tavg': { 
+      name: 'Ground_Heat_Flux', 
+      converter: (v) => v,
+      unit: 'W/m²'
+    },
+    
+    // Water Fluxes
+    'Snowf_tavg': { 
+      name: 'Snow_Precipitation_Rate', 
+      converter: (v) => v * 3600,
+      unit: 'mm/hour'
+    },
+    'Rainf_tavg': { 
+      name: 'Rain_Precipitation_Rate', 
+      converter: (v) => v * 3600,
+      unit: 'mm/hour'
+    },
+    'Evap_tavg': { 
+      name: 'Evapotranspiration', 
+      converter: (v) => v * 3600,
+      unit: 'mm/hour'
+    },
+    'PotEvap_tavg': { 
+      name: 'Potential_Evaporation', 
+      converter: (v) => v,
+      unit: 'W/m²'
+    },
+    'ECanop_tavg': { 
+      name: 'Canopy_Evaporation', 
+      converter: (v) => v,
+      unit: 'W/m²'
+    },
+    'TVeg_tavg': { 
+      name: 'Transpiration', 
+      converter: (v) => v,
+      unit: 'W/m²'
+    },
+    'ESoil_tavg': { 
+      name: 'Soil_Evaporation', 
+      converter: (v) => v,
+      unit: 'W/m²'
+    },
+    'CanopInt_inst': { 
+      name: 'Canopy_Water_Storage', 
+      converter: (v) => v,
+      unit: 'kg/m²'
+    },
+    
+    // Runoff
+    'Qs_acc': { 
+      name: 'Surface_Runoff', 
+      converter: (v) => v,
+      unit: 'kg/m²'
+    },
+    'Qsb_acc': { 
+      name: 'Baseflow_Runoff', 
+      converter: (v) => v,
+      unit: 'kg/m²'
+    },
+    'Qsm_acc': { 
+      name: 'Snow_Melt', 
+      converter: (v) => v,
+      unit: 'kg/m²'
+    },
+    
+    // Snow
+    'SWE_inst': { 
+      name: 'Snow_Water_Equivalent', 
+      converter: (v) => v,
+      unit: 'kg/m²'
+    },
+    'SnowDepth_inst': { 
+      name: 'Snow_Depth', 
+      converter: (v) => v * 100,
+      unit: 'cm'
+    },
+    
+    // Soil Moisture (4 layers)
+    'SoilMoi0_10cm_inst': { 
+      name: 'Soil_Moisture_0-10cm', 
+      converter: (v) => v,
+      unit: 'kg/m²'
+    },
+    'SoilMoi10_40cm_inst': { 
+      name: 'Soil_Moisture_10-40cm', 
+      converter: (v) => v,
+      unit: 'kg/m²'
+    },
+    'SoilMoi40_100cm_inst': { 
+      name: 'Soil_Moisture_40-100cm', 
+      converter: (v) => v,
+      unit: 'kg/m²'
+    },
+    'SoilMoi100_200cm_inst': { 
+      name: 'Soil_Moisture_100-200cm', 
+      converter: (v) => v,
+      unit: 'kg/m²'
+    },
+    'RootMoist_inst': { 
+      name: 'Root_Zone_Soil_Moisture', 
+      converter: (v) => v,
+      unit: 'kg/m²'
+    },
+    
+    // Soil Temperature (4 layers)
+    'SoilTMP0_10cm_inst': { 
+      name: 'Soil_Temperature_0-10cm', 
+      converter: (v) => v - 273.15,
+      unit: 'Celsius'
+    },
+    'SoilTMP10_40cm_inst': { 
+      name: 'Soil_Temperature_10-40cm', 
+      converter: (v) => v - 273.15,
+      unit: 'Celsius'
+    },
+    'SoilTMP40_100cm_inst': { 
+      name: 'Soil_Temperature_40-100cm', 
+      converter: (v) => v - 273.15,
+      unit: 'Celsius'
+    },
+    'SoilTMP100_200cm_inst': { 
+      name: 'Soil_Temperature_100-200cm', 
+      converter: (v) => v - 273.15,
+      unit: 'Celsius'
+    },
+    
+    // Surface
+    'AvgSurfT_inst': { 
+      name: 'Average_Surface_Temperature', 
+      converter: (v) => v - 273.15,
+      unit: 'Celsius'
+    },
+    'Albedo_inst': { 
+      name: 'Albedo', 
+      converter: (v) => v,
+      unit: '%'
     }
   };
 
@@ -198,49 +293,81 @@ export function generateHumanReadableCSV(data: WeatherDataPoint[]): string {
  * Useful for logging and validation.
  * 
  * @param data - Array of weather data points
- * @returns Object with dataset statistics
+ * @returns Summary object with dataset statistics
  */
-export function getDatasetSummary(data: WeatherDataPoint[]) {
+export function getDatasetSummary(data: WeatherDataPoint[]): {
+  totalPoints: number;
+  variables: string[];
+  dateRange?: { start: string; end: string };
+  spatialExtent?: { minLat: number; maxLat: number; minLon: number; maxLon: number };
+} {
   if (!data || data.length === 0) {
     return {
       totalPoints: 0,
-      variables: [],
-      dateRange: null,
-      spatialExtent: null
+      variables: []
     };
   }
 
-  // Get all unique variables
-  const variableNamesSet = new Set<string>();
+  // Extract all unique variable names
+  const variableNames = new Set<string>();
+  let minLat = Infinity, maxLat = -Infinity;
+  let minLon = Infinity, maxLon = -Infinity;
+  let minTime = Infinity, maxTime = -Infinity;
+
   for (const point of data) {
+    // Collect variable names
     if (point.variables) {
-      Object.keys(point.variables).forEach(varName => {
-        variableNamesSet.add(varName);
-      });
+      Object.keys(point.variables).forEach(varName => variableNames.add(varName));
     }
+
+    // Track spatial extent
+    minLat = Math.min(minLat, point.lat);
+    maxLat = Math.max(maxLat, point.lat);
+    minLon = Math.min(minLon, point.lon);
+    maxLon = Math.max(maxLon, point.lon);
+
+    // Track temporal extent
+    const time = point.timestamp.getTime();
+    minTime = Math.min(minTime, time);
+    maxTime = Math.max(maxTime, time);
   }
-
-  // Get date range
-  const timestamps = data.map(p => p.timestamp.getTime());
-  const minTime = new Date(Math.min(...timestamps));
-  const maxTime = new Date(Math.max(...timestamps));
-
-  // Get spatial extent
-  const lats = data.map(p => p.lat);
-  const lons = data.map(p => p.lon);
 
   return {
     totalPoints: data.length,
-    variables: Array.from(variableNamesSet).sort(),
+    variables: Array.from(variableNames).sort(),
     dateRange: {
-      start: minTime.toISOString(),
-      end: maxTime.toISOString()
+      start: new Date(minTime).toISOString(),
+      end: new Date(maxTime).toISOString()
     },
     spatialExtent: {
-      minLat: Math.min(...lats),
-      maxLat: Math.max(...lats),
-      minLon: Math.min(...lons),
-      maxLon: Math.max(...lons)
+      minLat,
+      maxLat,
+      minLon,
+      maxLon
     }
   };
+}
+
+/**
+ * Download CSV file to user's computer.
+ * 
+ * @param csvContent - CSV formatted string
+ * @param filename - Desired filename for download
+ */
+export function downloadCSV(csvContent: string, filename: string = 'gldas_data.csv'): void {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.display = 'none';
+  
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  URL.revokeObjectURL(url);
+  
+  console.log(`📥 CSV downloaded: ${filename}`);
 }

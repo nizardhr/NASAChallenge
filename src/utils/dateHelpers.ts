@@ -1,19 +1,15 @@
 /**
  * ============================================================================
- * DATE HELPERS & URL BUILDER (OPTIMIZED)
+ * DATE AND URL HELPERS FOR NASA GLDAS DATA
  * ============================================================================
  * 
- * CRITICAL OPTIMIZATION:
- * - Added spatial subsetting to OPeNDAP URLs
- * - Requests only nearest grid point instead of entire globe
- * - Reduces download size from ~100MB to ~10KB per file
- * - Reduces processing time from 60-180s to 1-5s per file
+ * PURPOSE:
+ * Generate optimized OPeNDAP URLs with spatial subsetting to minimize
+ * download time and bandwidth usage.
  * 
- * GLDAS Grid Info:
- * - Resolution: 0.25° x 0.25°
- * - Latitude: -60° to 90° (600 points)
- * - Longitude: -180° to 180° (1440 points)
- * - Time: 1 point per file (3-hourly)
+ * OPTIMIZATION:
+ * Instead of downloading global grids (~100MB per file), we request only
+ * a 3x3 grid centered on the user's location (~10KB per file).
  * 
  * ============================================================================
  */
@@ -26,7 +22,7 @@ export function getDayOfYear(date: Date): string {
   const diff = date.getTime() - start.getTime();
   const oneDay = 1000 * 60 * 60 * 24;
   const day = Math.floor(diff / oneDay);
-  return day.toString().padStart(3, '0');
+  return String(day).padStart(3, '0');
 }
 
 /**
@@ -40,53 +36,35 @@ export function formatYYYYMMDD(date: Date): string {
 }
 
 /**
- * Find nearest GLDAS grid index for latitude
- * GLDAS grid: -59.875 to 89.875 in 0.25° steps (600 points)
+ * Find nearest latitude grid index
+ * GLDAS grid: -60° to 90° at 0.25° resolution = 600 points
  */
 function findNearestLatIndex(lat: number): number {
-  // GLDAS latitude range: -60 to 90, resolution 0.25°
-  // First point: -59.875, Last point: 89.875
+  // GLDAS lat range: -59.875 to 89.875 (600 points)
   const minLat = -59.875;
   const resolution = 0.25;
-  
-  // Clamp to valid range
-  const clampedLat = Math.max(-59.875, Math.min(89.875, lat));
-  
-  // Calculate index (0-599)
-  const index = Math.round((clampedLat - minLat) / resolution);
-  
+  const index = Math.round((lat - minLat) / resolution);
   return Math.max(0, Math.min(599, index));
 }
 
 /**
- * Find nearest GLDAS grid index for longitude
- * GLDAS grid: -179.875 to 179.875 in 0.25° steps (1440 points)
+ * Find nearest longitude grid index
+ * GLDAS grid: -180° to 180° at 0.25° resolution = 1440 points
  */
 function findNearestLonIndex(lon: number): number {
-  // GLDAS longitude range: -180 to 180, resolution 0.25°
-  // First point: -179.875, Last point: 179.875
+  // GLDAS lon range: -179.875 to 179.875 (1440 points)
   const minLon = -179.875;
   const resolution = 0.25;
-  
-  // Normalize longitude to -180 to 180 range
-  let normalizedLon = lon;
-  while (normalizedLon > 180) normalizedLon -= 360;
-  while (normalizedLon < -180) normalizedLon += 360;
-  
-  // Clamp to valid range
-  const clampedLon = Math.max(-179.875, Math.min(179.875, normalizedLon));
-  
-  // Calculate index (0-1439)
-  const index = Math.round((clampedLon - minLon) / resolution);
-  
+  const index = Math.round((lon - minLon) / resolution);
   return Math.max(0, Math.min(1439, index));
 }
 
 /**
- * Build optimized GLDAS OPeNDAP URL with spatial subsetting
+ * Build optimized OPeNDAP URL with spatial subsetting.
  * 
- * OPTIMIZATION: Requests only a small spatial window around the target location
- * instead of the entire global grid.
+ * OPTIMIZATION STRATEGY:
+ * Request only a 3x3 grid window centered on user's location.
+ * This reduces download size from ~100MB to ~10KB per file (1000x reduction).
  * 
  * Before: Downloads ~100MB of global data per file (60-180s)
  * After:  Downloads ~10KB of local data per file (1-5s)
@@ -126,10 +104,59 @@ export function buildGLDASUrl(
   // Build OPeNDAP constraint expression with spatial subsetting
   // Format: variable[time_start:time_end][lat_start:lat_end][lon_start:lon_end]
   const constraints = [
+    // Forcing Variables (atmospheric inputs)
     `Tair_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
     `Rainf_f_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
     `Qair_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
     `Wind_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `Psurf_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `SWdown_f_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `LWdown_f_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    
+    // Energy Fluxes
+    `Swnet_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `Lwnet_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `Qle_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `Qh_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `Qg_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    
+    // Water Fluxes
+    `Snowf_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `Rainf_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `Evap_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `PotEvap_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `ECanop_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `TVeg_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `ESoil_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `CanopInt_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    
+    // Runoff
+    `Qs_acc[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `Qsb_acc[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `Qsm_acc[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    
+    // Snow
+    `SWE_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `SnowDepth_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    
+    // Soil Moisture (4 layers)
+    `SoilMoi0_10cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `SoilMoi10_40cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `SoilMoi40_100cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `SoilMoi100_200cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `RootMoist_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    
+    // Soil Temperature (4 layers)
+    `SoilTMP0_10cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `SoilTMP10_40cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `SoilTMP40_100cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `SoilTMP100_200cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    
+    // Surface
+    `AvgSurfT_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    `Albedo_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    
+    // Coordinates (must be at end)
     `lat[${latStart}:${latEnd}]`,
     `lon[${lonStart}:${lonEnd}]`,
     `time[0:0]`

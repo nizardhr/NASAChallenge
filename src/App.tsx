@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { InputForm, FormData } from './components/InputForm';
 import { getUrlsForDateRange } from './utils/dateHelpers';
 import { parseASCIIData, WeatherDataPoint } from './utils/asciiParser';
-import { generateCSV, generateHumanReadableCSV, getDatasetSummary } from './utils/csvGenerator';
+import { generateCSV, getDatasetSummary } from './utils/csvGenerator';
 import './index.css';
 
 function App() {
@@ -153,7 +153,7 @@ function App() {
     console.log('📥 Starting CSV download...');
     
     // Generate CSV from all accumulated data
-    const csv = generateHumanReadableCSV(data); // Using human-readable version with unit conversions
+    const csv = generateCSV(data); // Using human-readable version with unit conversions
     
     // Create blob and download
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
