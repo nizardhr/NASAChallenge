@@ -12,6 +12,7 @@
  * - Removed automatic per-file CSV download
  * - CSV export now happens once after all files are processed
  * - User triggers download via button click
+ * - Fixed parsing to handle OPeNDAP named dimension format
  *
  * ============================================================================
  */
@@ -87,12 +88,15 @@ export function parseASCIIData(
   }
 
   // --- Extract variable lines ---
+  // Filter out coordinate lines, dataset header, and variable metadata lines
   const dataLines = lines.filter(
     l =>
       !/^lat/.test(l) &&
       !/^lon/.test(l) &&
       !/^time/.test(l) &&
-      !/^Dataset/.test(l)
+      !/^Dataset/.test(l) &&
+      // Filter out variable metadata lines (e.g., "Wind_f_inst.lon, ...")
+      !/\.\w+,\s*[-\d]/.test(l)
   );
 
   console.log(`   Found ${dataLines.length} data lines`);
@@ -114,43 +118,54 @@ export function parseASCIIData(
     const parts = line.split(",");
     if (parts.length < 2) continue;
 
-    const value = parseFloat(parts[1]);
-    if (isNaN(value)) continue;
-
-    // Match format: VarName[time][lat][lon]
-    // This regex now handles both formats:
-    // - Original: Tair_f_inst[0][300][200]
-    // - With subset: Tair_f_inst[0:0][399:401][319:321][0][1][2]
-    const match = parts[0].match(/^(\w+)(?:\[[\d:]+\])*\[(\d+)\]\[(\d+)\]\[(\d+)\]/);
+    // Match format: VarName.VarName[VarName.time=VALUE][VarName.lat=VALUE]
+    // Example: Wind_f_inst.Wind_f_inst[Wind_f_inst.time=12362220][Wind_f_inst.lat=39.875]
+    const match = parts[0].match(/^(\w+)\.\w+\[\w+\.time=(\d+)\]\[\w+\.lat=([\d.]+)\]/);
+    
     if (!match) {
       console.warn("   ⚠️ Could not parse line:", line.substring(0, 100));
       continue;
     }
 
     const varName = match[1];
-    const timeIdx = parseInt(match[2]);
-    const latIdx = parseInt(match[3]);
-    const lonIdx = parseInt(match[4]);
+    const timeValue = parseInt(match[2]);
+    const latValue = parseFloat(match[3]);
 
-    if (
-      timeIdx < times.length &&
-      latIdx < lats.length &&
-      lonIdx < lons.length
-    ) {
-      const key = `${timeIdx}_${latIdx}_${lonIdx}`;
-
-      if (!pointsMap[key]) {
-        pointsMap[key] = {
-          lat: lats[latIdx],
-          lon: lons[lonIdx],
-          timestamp: new Date(times[timeIdx] * 1000),
-          variables: {}
-        };
-      }
-
-      pointsMap[key].variables[varName] = value;
-      variableNames.add(varName);
+    // Parse all numeric values from the line (these correspond to longitude positions)
+    const values = parts.slice(1).map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
+    
+    if (values.length === 0) {
+      console.warn("   ⚠️ No valid values in line:", line.substring(0, 100));
+      continue;
     }
+
+    // Find the closest lat and time indices
+    const latIdx = lats.findIndex(lat => Math.abs(lat - latValue) < 0.01);
+    const timeIdx = times.findIndex(time => Math.abs(time - timeValue) < 1);
+
+    if (timeIdx === -1 || latIdx === -1) {
+      console.warn(`   ⚠️ Could not match lat=${latValue} time=${timeValue}`);
+      continue;
+    }
+
+    // Each value corresponds to a longitude in order
+    values.forEach((value, lonIdx) => {
+      if (lonIdx < lons.length) {
+        const key = `${timeIdx}_${latIdx}_${lonIdx}`;
+
+        if (!pointsMap[key]) {
+          pointsMap[key] = {
+            lat: lats[latIdx],
+            lon: lons[lonIdx],
+            timestamp: new Date(times[timeIdx] * 1000),
+            variables: {}
+          };
+        }
+
+        pointsMap[key].variables[varName] = value;
+        variableNames.add(varName);
+      }
+    });
   }
 
   const points = Object.values(pointsMap);
