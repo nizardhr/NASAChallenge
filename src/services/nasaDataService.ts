@@ -86,8 +86,9 @@ export class NASADataFetcher {
   
   /**
    * Base URL for NASA GES DISC Data Rods API
+   * FIXED: Changed from timeseries.cgi to OTF/HTTP_services.cgi
    */
-  private readonly dataRodsBaseUrl = 'https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi';
+  private readonly dataRodsBaseUrl = 'https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/OTF/HTTP_services.cgi';
   
   /**
    * Proxy endpoint for making authenticated requests
@@ -198,6 +199,8 @@ export class NASADataFetcher {
    * Variable: Tair_f_inst (Air Temperature at 2m height)
    * Units: Kelvin (converted to Celsius)
    * Resolution: 3-hourly
+   * 
+   * FIXED: Changed to use proper Data Rods API parameters
    */
   private async fetchTemperatureData(
     location: Coordinates,
@@ -207,20 +210,25 @@ export class NASADataFetcher {
     console.log('   📊 Fetching temperature data from NASA GLDAS via proxy...');
 
     const url = this.buildDataRodsUrl({
-      variable: 'GLDAS2:GLDAS_NOAH025_3H_v2.1:Tair_f_inst',
-      location: `${location.lat},${location.lng}`,
-      startDate: this.formatDate(startDate),
-      endDate: this.formatDate(endDate),
-      type: 'asc2'
+      FILENAME: '/data/GLDAS/GLDAS_NOAH025_3H.2.1',
+      SERVICE: 'SUBSET_GLDAS',
+      VERSION: '1.02',
+      DATASET: 'GLDAS_NOAH025_3H_2.1',
+      VARIABLES: 'Tair_f_inst',
+      WEST: location.lng.toString(),
+      EAST: location.lng.toString(),
+      SOUTH: location.lat.toString(),
+      NORTH: location.lat.toString(),
+      STARTDATE: this.formatDateForAPI(startDate),
+      ENDDATE: this.formatDateForAPI(endDate),
+      FORMAT: 'bmM0Lw'
     });
 
     try {
-      // Get credentials from auth service
       const credentials = nasaAuthService.getCredentials();
       
       console.log('   🔄 Sending request to proxy...');
       
-      // Make request through proxy
       const response = await fetch(this.proxyEndpoint, {
         method: 'POST',
         headers: {
@@ -260,34 +268,42 @@ export class NASADataFetcher {
   }
 
   /**
-   * Fetch precipitation data from NASA GLDAS via Data Rods (through proxy)
+   * Fetch precipitation data from NASA NLDAS via Data Rods (through proxy)
    * 
-   * Variable: Rainf_f_tavg (Rainfall rate, time-averaged)
+   * Variable: APCPsfc (Surface Precipitation Rate)
    * Units: kg/m²/s (converted to mm/hour)
-   * Resolution: 3-hourly
+   * Resolution: Hourly
+   * Coverage: North America only (25-53°N, 125-67°W)
+   * 
+   * FIXED: Changed to use proper Data Rods API parameters
    */
   private async fetchPrecipitationData(
     location: Coordinates,
     startDate: Date,
     endDate: Date
   ): Promise<TimeSeriesDataPoint[]> {
-    console.log('   📊 Fetching precipitation data from NASA GLDAS via proxy...');
+    console.log('   📊 Fetching precipitation data from NASA NLDAS via proxy...');
 
     const url = this.buildDataRodsUrl({
-      variable: 'GLDAS2:GLDAS_NOAH025_3H_v2.1:Rainf_f_tavg',
-      location: `${location.lat},${location.lng}`,
-      startDate: this.formatDate(startDate),
-      endDate: this.formatDate(endDate),
-      type: 'asc2'
+      FILENAME: '/data/NLDAS/NLDAS_NOAH0125_H.002',
+      SERVICE: 'SUBSET_NLDAS',
+      VERSION: '1.02',
+      DATASET: 'NLDAS_NOAH0125_H.002',
+      VARIABLES: 'APCPsfc',
+      WEST: location.lng.toString(),
+      EAST: location.lng.toString(),
+      SOUTH: location.lat.toString(),
+      NORTH: location.lat.toString(),
+      STARTDATE: this.formatDateForAPI(startDate),
+      ENDDATE: this.formatDateForAPI(endDate),
+      FORMAT: 'bmM0Lw'
     });
 
     try {
-      // Get credentials from auth service
       const credentials = nasaAuthService.getCredentials();
       
       console.log('   🔄 Sending request to proxy...');
       
-      // Make request through proxy
       const response = await fetch(this.proxyEndpoint, {
         method: 'POST',
         headers: {
@@ -348,7 +364,21 @@ export class NASADataFetcher {
   }
 
   /**
-   * Format date for NASA API (YYYY-MM-DD)
+   * Format date for NASA API (YYYY-MM-DDTHH:MM)
+   * FIXED: Added proper time format for Data Rods API
+   * 
+   * @param date - JavaScript Date object
+   * @returns Date string in YYYY-MM-DDTHH:MM format
+   */
+  private formatDateForAPI(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}T00:00`;
+  }
+
+  /**
+   * Format date for display (YYYY-MM-DD)
    * 
    * @param date - JavaScript Date object
    * @returns Date string in YYYY-MM-DD format
