@@ -11,6 +11,9 @@
  * Instead of downloading global grids (~100MB per file), we request only
  * a 3x3 grid centered on the user's location (~10KB per file).
  * 
+ * NOAH-LSM VARIABLES:
+ * All 36 variables from GLDAS Noah-LSM 3-hourly product are included.
+ * 
  * ============================================================================
  */
 
@@ -60,20 +63,17 @@ function findNearestLonIndex(lon: number): number {
 }
 
 /**
- * Build optimized OPeNDAP URL with spatial subsetting.
+ * Build optimized OPeNDAP URL with ALL 36 NOAH-LSM variables.
  * 
  * OPTIMIZATION STRATEGY:
  * Request only a 3x3 grid window centered on user's location.
- * This reduces download size from ~100MB to ~10KB per file (1000x reduction).
- * 
- * Before: Downloads ~100MB of global data per file (60-180s)
- * After:  Downloads ~10KB of local data per file (1-5s)
+ * This reduces download size from ~100MB to ~15KB per file.
  * 
  * @param date - Target date
  * @param hour - Hour of day (0, 3, 6, 9, 12, 15, 18, 21)
  * @param lat - Target latitude
  * @param lon - Target longitude
- * @returns Optimized OPeNDAP URL with spatial constraints
+ * @returns Optimized OPeNDAP URL with spatial constraints and ALL variables
  */
 export function buildGLDASUrl(
   date: Date, 
@@ -95,79 +95,93 @@ export function buildGLDASUrl(
   const lonIndex = findNearestLonIndex(lon);
   
   // Create spatial window (3x3 grid points centered on target)
-  // This ensures we get data even if the exact point has issues
   const latStart = Math.max(0, latIndex - 1);
   const latEnd = Math.min(599, latIndex + 1);
   const lonStart = Math.max(0, lonIndex - 1);
   const lonEnd = Math.min(1439, lonIndex + 1);
   
-  // Build OPeNDAP constraint expression with spatial subsetting
+  // Build OPeNDAP constraint expression with ALL 36 NOAH-LSM variables
   // Format: variable[time_start:time_end][lat_start:lat_end][lon_start:lon_end]
   const constraints = [
-    // Forcing Variables (atmospheric inputs)
-    `Tair_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Rainf_f_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Qair_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Wind_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Psurf_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `SWdown_f_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `LWdown_f_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    // ========================================================================
+    // ENERGY FLUXES (5 variables)
+    // ========================================================================
+    `Swnet_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,      // Net short wave radiation flux (W/m²)
+    `Lwnet_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,      // Net long-wave radiation flux (W/m²)
+    `Qle_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,        // Latent heat net flux (W/m²)
+    `Qh_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,         // Sensible heat net flux (W/m²)
+    `Qg_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,         // Ground heat flux (W/m²)
     
-    // Energy Fluxes
-    `Swnet_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Lwnet_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Qle_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Qh_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Qg_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    // ========================================================================
+    // WATER FLUXES (9 variables)
+    // ========================================================================
+    `Snowf_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,      // Snow precipitation rate (kg/m²/s)
+    `Rainf_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,      // Rain precipitation rate (kg/m²/s)
+    `Evap_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,       // Evapotranspiration (kg/m²/s)
+    `Qs_acc[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,          // Storm surface runoff (kg/m²)
+    `Qsb_acc[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,         // Baseflow-groundwater runoff (kg/m²)
+    `Qsm_acc[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,         // Snow melt (kg/m²)
+    `PotEvap_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,    // Potential evaporation rate (W/m²)
+    `ECanop_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,     // Canopy water evaporation (W/m²)
+    `TVeg_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,       // Transpiration (W/m²)
+    `ESoil_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,      // Direct evaporation from bare soil (W/m²)
     
-    // Water Fluxes
-    `Snowf_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Rainf_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Evap_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `PotEvap_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `ECanop_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `TVeg_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `ESoil_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `CanopInt_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    // ========================================================================
+    // SURFACE PROPERTIES (3 variables)
+    // ========================================================================
+    `AvgSurfT_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,   // Average surface skin temperature (K)
+    `Albedo_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,     // Albedo (%)
+    `CanopInt_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,   // Plant canopy surface water (kg/m²)
     
-    // Runoff
-    `Qs_acc[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Qsb_acc[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Qsm_acc[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    // ========================================================================
+    // SNOW PROPERTIES (2 variables)
+    // ========================================================================
+    `SWE_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,        // Snow depth water equivalent (kg/m²)
+    `SnowDepth_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,  // Snow depth (m)
     
-    // Snow
-    `SWE_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `SnowDepth_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    // ========================================================================
+    // SOIL MOISTURE - 4 LAYERS (5 variables including root zone)
+    // ========================================================================
+    `SoilMoi0_10cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,    // Soil moisture 0-10cm (kg/m²)
+    `SoilMoi10_40cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,   // Soil moisture 10-40cm (kg/m²)
+    `SoilMoi40_100cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,  // Soil moisture 40-100cm (kg/m²)
+    `SoilMoi100_200cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`, // Soil moisture 100-200cm (kg/m²)
+    `RootMoist_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,        // Root zone soil moisture (kg/m²)
     
-    // Soil Moisture (4 layers)
-    `SoilMoi0_10cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `SoilMoi10_40cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `SoilMoi40_100cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `SoilMoi100_200cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `RootMoist_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    // ========================================================================
+    // SOIL TEMPERATURE - 4 LAYERS (4 variables)
+    // ========================================================================
+    `SoilTMP0_10cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,    // Soil temperature 0-10cm (K)
+    `SoilTMP10_40cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,   // Soil temperature 10-40cm (K)
+    `SoilTMP40_100cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,  // Soil temperature 40-100cm (K)
+    `SoilTMP100_200cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`, // Soil temperature 100-200cm (K)
     
-    // Soil Temperature (4 layers)
-    `SoilTMP0_10cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `SoilTMP10_40cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `SoilTMP40_100cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `SoilTMP100_200cm_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
+    // ========================================================================
+    // FORCING VARIABLES (7 variables) - Atmospheric Inputs
+    // ========================================================================
+    `Wind_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,     // Wind speed (m/s)
+    `Rainf_f_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,    // Total precipitation rate (kg/m²/s)
+    `Tair_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,     // Air temperature (K)
+    `Qair_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,     // Specific humidity (kg/kg)
+    `Psurf_f_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,    // Surface pressure (Pa)
+    `SWdown_f_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,   // Downward short-wave radiation flux (W/m²)
+    `LWdown_f_tavg[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,   // Downward long-wave radiation flux (W/m²)
     
-    // Surface
-    `AvgSurfT_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    `Albedo_inst[0:0][${latStart}:${latEnd}][${lonStart}:${lonEnd}]`,
-    
-    // Coordinates (must be at end)
+    // ========================================================================
+    // COORDINATE VARIABLES (must be at end)
+    // ========================================================================
     `lat[${latStart}:${latEnd}]`,
     `lon[${lonStart}:${lonEnd}]`,
     `time[0:0]`
   ].join(',');
   
+  // OPeNDAP ASCII URL format
   const url = `${baseUrl}/${year}/${doy}/${filename}.ascii?${constraints}`;
   
-  // Log the optimization
   console.log(`🎯 Optimized URL for (${lat}, ${lon}):`);
   console.log(`   Grid indices: lat[${latStart}:${latEnd}] lon[${lonStart}:${lonEnd}]`);
   console.log(`   Data points: ${(latEnd - latStart + 1) * (lonEnd - lonStart + 1)} (vs 864,000 global)`);
+  console.log(`   Variables: 36 (ALL Noah-LSM parameters)`);
   
   return url;
 }
@@ -206,7 +220,7 @@ export function getUrlsForDateRange(
   
   console.log(`   Total files: ${urls.length}`);
   console.log(`   Estimated download time: ${urls.length * 2}-${urls.length * 5} seconds`);
-  console.log(`   Optimization: ~${Math.round(urls.length * 0.09)}MB total (vs ~${Math.round(urls.length * 100)}MB without optimization)`);
+  console.log(`   Optimization: ~${Math.round(urls.length * 0.015)}MB total (vs ~${Math.round(urls.length * 100)}MB without optimization)`);
   
   return urls;
 }
