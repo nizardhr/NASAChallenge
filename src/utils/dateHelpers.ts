@@ -178,7 +178,8 @@ export function buildGLDASUrlBinary(
   ].join(',');
   
   // CRITICAL: Use .dods extension for binary NetCDF format
-  const url = `${baseUrl}/${year}/${doy}/${filename}.nc4.dods?${constraints}`;
+  const url = `${baseUrl.replace('opendap', 'dods')}/${year}/${doy}/${filename}?${constraints}`;
+
   
   console.log(`🎯 Binary NetCDF URL for (${lat}, ${lon}):`);
   console.log(`   Format: DODS binary (NetCDF-4)`);
