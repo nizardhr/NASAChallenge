@@ -8,7 +8,7 @@
  * proper unit conversions and meaningful column names.
  * 
  * COMPLETE VARIABLE MAPPINGS:
- * All 25 selected NOAH-LSM variables with proper names and unit conversions
+ * All 36 GLDAS NOAH-LSM variables with proper names and unit conversions
  * 
  * ============================================================================
  */
@@ -28,106 +28,77 @@ export function generateCSV(data: WeatherDataPoint[]): string {
     return "No data available";
   }
 
-  // COMPLETE Variable name mapping and unit conversions for ALL 25 variables
+  // COMPLETE Variable name mapping and unit conversions for ALL 36 GLDAS NOAH variables
   const variableMapping: Record<string, { 
     name: string, 
     converter: (value: number) => number,
     unit: string 
   }> = {
     // ========================================================================
-    // FORCING VARIABLES (7 atmospheric inputs)
-    // ========================================================================
-    'Tair_f_inst': { 
-      name: 'Air_Temperature', 
-      converter: (v) => v - 273.15,
-      unit: 'Celsius'
-    },
-    'Rainf_f_tavg': { 
-      name: 'Total_Precipitation_Rate', 
-      converter: (v) => v * 3600,
-      unit: 'mm/hour'
-    },
-    'Qair_f_inst': { 
-      name: 'Specific_Humidity', 
-      converter: (v) => v * 1000,
-      unit: 'g/kg'
-    },
-    'Wind_f_inst': { 
-      name: 'Wind_Speed', 
-      converter: (v) => v,
-      unit: 'm/s'
-    },
-    'Psurf_f_inst': { 
-      name: 'Surface_Pressure', 
-      converter: (v) => v / 100, // Convert Pa to hPa (millibars)
-      unit: 'hPa'
-    },
-    'SWdown_f_tavg': { 
-      name: 'Downward_Shortwave_Radiation', 
-      converter: (v) => v,
-      unit: 'W/m²'
-    },
-    'LWdown_f_tavg': { 
-      name: 'Downward_Longwave_Radiation', 
-      converter: (v) => v,
-      unit: 'W/m²'
-    },
-    
-    // ========================================================================
-    // ENERGY FLUXES (2 variables)
+    // ENERGY FLUXES (5 variables)
     // ========================================================================
     'Swnet_tavg': { 
       name: 'Net_Shortwave_Radiation', 
       converter: (v) => v,
-      unit: 'W/m²'
+      unit: 'W_per_m2'
+    },
+    'Lwnet_tavg': { 
+      name: 'Net_Longwave_Radiation', 
+      converter: (v) => v,
+      unit: 'W_per_m2'
     },
     'Qle_tavg': { 
       name: 'Latent_Heat_Flux', 
       converter: (v) => v,
-      unit: 'W/m²'
+      unit: 'W_per_m2'
+    },
+    'Qh_tavg': { 
+      name: 'Sensible_Heat_Flux', 
+      converter: (v) => v,
+      unit: 'W_per_m2'
+    },
+    'Qg_tavg': { 
+      name: 'Ground_Heat_Flux', 
+      converter: (v) => v,
+      unit: 'W_per_m2'
     },
     
     // ========================================================================
-    // WATER FLUXES (7 variables)
+    // WATER BALANCE (6 variables)
     // ========================================================================
     'Snowf_tavg': { 
       name: 'Snow_Precipitation_Rate', 
       converter: (v) => v * 3600,
-      unit: 'mm/hour'
+      unit: 'mm_per_hour'
     },
     'Rainf_tavg': { 
       name: 'Rain_Precipitation_Rate', 
       converter: (v) => v * 3600,
-      unit: 'mm/hour'
+      unit: 'mm_per_hour'
     },
     'Evap_tavg': { 
       name: 'Total_Evapotranspiration', 
       converter: (v) => v * 3600,
-      unit: 'mm/hour'
+      unit: 'mm_per_hour'
     },
     'Qs_acc': { 
       name: 'Surface_Runoff', 
       converter: (v) => v,
-      unit: 'kg/m²'
+      unit: 'kg_per_m2'
     },
     'Qsb_acc': { 
       name: 'Subsurface_Runoff', 
       converter: (v) => v,
-      unit: 'kg/m²'
+      unit: 'kg_per_m2'
     },
-    'ECanop_tavg': { 
-      name: 'Canopy_Evaporation', 
+    'Qsm_acc': { 
+      name: 'Snow_Melt', 
       converter: (v) => v,
-      unit: 'W/m²'
-    },
-    'ESoil_tavg': { 
-      name: 'Bare_Soil_Evaporation', 
-      converter: (v) => v,
-      unit: 'W/m²'
+      unit: 'kg_per_m2'
     },
     
     // ========================================================================
-    // SURFACE PROPERTIES (3 variables)
+    // SURFACE PROPERTIES (4 variables)
     // ========================================================================
     'AvgSurfT_inst': { 
       name: 'Surface_Skin_Temperature', 
@@ -137,21 +108,12 @@ export function generateCSV(data: WeatherDataPoint[]): string {
     'Albedo_inst': { 
       name: 'Surface_Albedo', 
       converter: (v) => v,
-      unit: '%'
+      unit: 'percent'
     },
-    'CanopInt_inst': { 
-      name: 'Canopy_Water_Storage', 
-      converter: (v) => v,
-      unit: 'kg/m²'
-    },
-    
-    // ========================================================================
-    // SNOW PROPERTIES (2 variables)
-    // ========================================================================
     'SWE_inst': { 
       name: 'Snow_Water_Equivalent', 
       converter: (v) => v,
-      unit: 'kg/m²'
+      unit: 'kg_per_m2'
     },
     'SnowDepth_inst': { 
       name: 'Snow_Depth', 
@@ -160,31 +122,133 @@ export function generateCSV(data: WeatherDataPoint[]): string {
     },
     
     // ========================================================================
-    // SOIL MOISTURE (2 key layers)
+    // SOIL MOISTURE (4 layers - 0-200cm)
     // ========================================================================
     'SoilMoi0_10cm_inst': { 
-      name: 'Surface_Soil_Moisture_0-10cm', 
+      name: 'Soil_Moisture_0-10cm', 
       converter: (v) => v,
-      unit: 'kg/m²'
+      unit: 'kg_per_m2'
+    },
+    'SoilMoi10_40cm_inst': { 
+      name: 'Soil_Moisture_10-40cm', 
+      converter: (v) => v,
+      unit: 'kg_per_m2'
+    },
+    'SoilMoi40_100cm_inst': { 
+      name: 'Soil_Moisture_40-100cm', 
+      converter: (v) => v,
+      unit: 'kg_per_m2'
     },
     'SoilMoi100_200cm_inst': { 
-      name: 'Deep_Soil_Moisture_100-200cm', 
+      name: 'Soil_Moisture_100-200cm', 
       converter: (v) => v,
-      unit: 'kg/m²'
+      unit: 'kg_per_m2'
     },
     
     // ========================================================================
-    // SOIL TEMPERATURE (2 key layers)
+    // SOIL TEMPERATURE (4 layers - 0-200cm)
     // ========================================================================
     'SoilTMP0_10cm_inst': { 
-      name: 'Surface_Soil_Temperature_0-10cm', 
+      name: 'Soil_Temperature_0-10cm', 
+      converter: (v) => v - 273.15,
+      unit: 'Celsius'
+    },
+    'SoilTMP10_40cm_inst': { 
+      name: 'Soil_Temperature_10-40cm', 
+      converter: (v) => v - 273.15,
+      unit: 'Celsius'
+    },
+    'SoilTMP40_100cm_inst': { 
+      name: 'Soil_Temperature_40-100cm', 
       converter: (v) => v - 273.15,
       unit: 'Celsius'
     },
     'SoilTMP100_200cm_inst': { 
-      name: 'Deep_Soil_Temperature_100-200cm', 
+      name: 'Soil_Temperature_100-200cm', 
       converter: (v) => v - 273.15,
       unit: 'Celsius'
+    },
+    
+    // ========================================================================
+    // EVAPORATION COMPONENTS (4 variables)
+    // ========================================================================
+    'PotEvap_tavg': { 
+      name: 'Potential_Evaporation', 
+      converter: (v) => v,
+      unit: 'W_per_m2'
+    },
+    'ECanop_tavg': { 
+      name: 'Canopy_Water_Evaporation', 
+      converter: (v) => v,
+      unit: 'W_per_m2'
+    },
+    'TVeg_tavg': { 
+      name: 'Vegetation_Transpiration', 
+      converter: (v) => v,
+      unit: 'W_per_m2'
+    },
+    'ESoil_tavg': { 
+      name: 'Bare_Soil_Evaporation', 
+      converter: (v) => v,
+      unit: 'W_per_m2'
+    },
+    
+    // ========================================================================
+    // OTHER LAND SURFACE (3 variables)
+    // ========================================================================
+    'RootMoist_inst': { 
+      name: 'Root_Zone_Soil_Moisture', 
+      converter: (v) => v,
+      unit: 'kg_per_m2'
+    },
+    'CanopInt_inst': { 
+      name: 'Canopy_Water_Storage', 
+      converter: (v) => v,
+      unit: 'kg_per_m2'
+    },
+    'ACond_tavg': { 
+      name: 'Aerodynamic_Conductance', 
+      converter: (v) => v,
+      unit: 'm_per_s'
+    },
+    
+    // ========================================================================
+    // FORCING VARIABLES (7 atmospheric inputs)
+    // ========================================================================
+    'Wind_f_inst': { 
+      name: 'Wind_Speed', 
+      converter: (v) => v,
+      unit: 'm_per_s'
+    },
+    'Rainf_f_tavg': { 
+      name: 'Total_Precipitation_Forcing', 
+      converter: (v) => v * 3600,
+      unit: 'mm_per_hour'
+    },
+    'Tair_f_inst': { 
+      name: 'Air_Temperature', 
+      converter: (v) => v - 273.15,
+      unit: 'Celsius'
+    },
+    'Qair_f_inst': { 
+      name: 'Specific_Humidity', 
+      converter: (v) => v * 1000,
+      unit: 'g_per_kg'
+    },
+    'Psurf_f_inst': { 
+      name: 'Surface_Pressure', 
+      converter: (v) => v / 100, // Convert Pa to hPa
+      unit: 'hPa'
+    },
+    'SWdown_f_tavg': { 
+      name: 'Downward_Shortwave_Radiation', 
+      converter: (v) => v,
+      unit: 'W_per_m2'
+    },
+    'LWdown_f_tavg': { 
+      name: 'Downward_Longwave_Radiation', 
+      converter: (v) => v,
+      unit: 'W_per_m2'
     }
   };
 
@@ -200,7 +264,8 @@ export function generateCSV(data: WeatherDataPoint[]): string {
 
   const variableNames = Array.from(variableNamesSet).sort();
 
-  console.log(`📊 Generating CSV with ${variableNames.length} variables:`, variableNames.join(', '));
+  console.log(`📊 Generating CSV with ${variableNames.length} variables`);
+  console.log(`   Variables:`, variableNames.join(', '));
 
   // Create headers with human-readable names and units
   const headers = [
@@ -210,9 +275,10 @@ export function generateCSV(data: WeatherDataPoint[]): string {
     ...variableNames.map(varName => {
       const mapping = variableMapping[varName];
       if (mapping) {
-        return `${mapping.name}_${mapping.unit.replace(/[²\/]/g, '')}`;
+        return `${mapping.name}_${mapping.unit}`;
       }
-      // Fallback for any unmapped variables (shouldn't happen with our 25 variables)
+      // Fallback for any unmapped variables
+      console.warn(`   ⚠️ Unmapped variable: ${varName} - using original name`);
       return varName;
     })
   ];
@@ -311,28 +377,4 @@ export function getDatasetSummary(data: WeatherDataPoint[]): {
       maxLon
     }
   };
-}
-
-/**
- * Download CSV file to user's computer.
- * 
- * @param csvContent - CSV formatted string
- * @param filename - Desired filename for download
- */
-export function downloadCSV(csvContent: string, filename: string = 'gldas_data.csv'): void {
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.style.display = 'none';
-  
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  
-  URL.revokeObjectURL(url);
-  
-  console.log(`📥 CSV downloaded: ${filename}`);
 }

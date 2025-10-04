@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { InputForm, FormData } from './components/InputForm';
-import { getUrlsForDateRange } from './utils/dateHelpers';
-import { parseASCIIData, WeatherDataPoint } from './utils/asciiParser';
+import { getUrlsForDateRangeBinary } from './utils/dateHelpers';
+import { parseNetCDFData, WeatherDataPoint } from './utils/netcdfParser';
 import { generateCSV, getDatasetSummary } from './utils/csvGenerator';
 import './index.css';
 
@@ -11,28 +11,48 @@ function App() {
   const [data, setData] = useState<WeatherDataPoint[]>([]);
   const [error, setError] = useState('');
 
+  /**
+   * Convert base64 string to ArrayBuffer
+   * Required for binary NetCDF parsing
+   */
+  const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
+    const binaryString = atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  };
+
   const handleFetchData = async (formData: FormData) => {
     setLoading(true);
     setError('');
     setData([]);
 
     try {
-      // Generate optimized URLs with spatial subsetting
-      const urls = getUrlsForDateRange(
-        formData.startDate, 
+      console.log('🚀 ============================================');
+      console.log('   FORCING BINARY NETCDF FORMAT');
+      console.log('   ALL 36 GLDAS VARIABLES');
+      console.log('============================================');
+
+      // Generate BINARY NetCDF URLs (NOT ASCII)
+      const urls = getUrlsForDateRangeBinary(
+        formData.startDate,
         formData.endDate,
         formData.latitude,
         formData.longitude
       );
-      
+
       // Warning for large date ranges
       if (urls.length > 80) {
         const days = Math.ceil(urls.length / 8);
         console.warn(`⚠️ Large date range: ${urls.length} files (~${days} days)`);
-        console.warn('   Estimated time: ' + (urls.length * 2) + '-' + (urls.length * 5) + ' seconds with optimization');
+        console.warn('   Estimated time: ' + (urls.length * 2) + '-' + (urls.length * 5) + ' seconds');
       }
-      
-      setProgress(`Found ${urls.length} files to download (optimized for ${formData.latitude}°, ${formData.longitude}°)...`);
+
+      setProgress(
+        `Found ${urls.length} files to download using Binary NetCDF format (ALL 36 variables)...`
+      );
 
       const allData: WeatherDataPoint[] = [];
       let successCount = 0;
@@ -42,7 +62,9 @@ function App() {
       for (let i = 0; i < urls.length; i++) {
         const fileNum = i + 1;
         const progressPercent = Math.round((fileNum / urls.length) * 100);
-        setProgress(`[${progressPercent}%] Downloading file ${fileNum} of ${urls.length}...`);
+        setProgress(
+          `[${progressPercent}%] Downloading Binary NetCDF file ${fileNum} of ${urls.length}...`
+        );
 
         try {
           const response = await fetch('/api/download-gldas', {
@@ -55,90 +77,127 @@ function App() {
 
           if (!response.ok) {
             const errorData = await response.json();
-            
+
             // Handle specific errors differently
             if (response.status === 504) {
-              // Timeout - provide helpful message
               throw new Error(
                 `File ${fileNum}: Timeout (NASA server slow). ` +
                 (errorData.suggestion || 'Try a smaller date range.')
               );
             }
-            
-            throw new Error(errorData.message || errorData.error || `HTTP ${response.status}`);
+
+            throw new Error(
+              errorData.error || errorData.message || `HTTP ${response.status}`
+            );
           }
 
           const result = await response.json();
 
           if (!result.success) {
-            throw new Error(result.message || result.error || 'Download failed');
+            throw new Error(result.error || 'Download failed');
           }
 
-          setProgress(`[${progressPercent}%] Processing file ${fileNum} of ${urls.length}...`);
-          
-          // Parse the file and add to accumulated data
-          const fileData = parseASCIIData(
-            result.data,
+          if (!result.data) {
+            throw new Error('No data received from proxy');
+          }
+
+          setProgress(
+            `[${progressPercent}%] Parsing Binary NetCDF file ${fileNum}/${urls.length}...`
+          );
+
+          console.log(`📦 File ${fileNum}: Processing binary data (${(result.data.length / 1024).toFixed(2)} KB base64)...`);
+
+          // Convert base64 to ArrayBuffer
+          const arrayBuffer = base64ToArrayBuffer(result.data);
+
+          console.log(`   Converted to ArrayBuffer: ${(arrayBuffer.byteLength / 1024).toFixed(2)} KB`);
+
+          // Parse NetCDF binary format
+          const fileData = parseNetCDFData(
+            arrayBuffer,
             formData.latitude,
             formData.longitude
           );
 
+          if (fileData.length > 0) {
+            const varCount = Object.keys(fileData[0]?.variables || {}).length;
+            console.log(`✅ File ${fileNum}: Extracted ${varCount} variables from ${fileData.length} data points`);
+          }
+
+          // Accumulate data
           allData.push(...fileData);
           successCount++;
 
-          // Small delay to prevent overwhelming the server
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-        } catch (fileError: any) {
+          // Update progress with success count
+          setProgress(
+            `[${progressPercent}%] Downloaded ${successCount}/${urls.length} files successfully ` +
+            `(${allData.length} data points, ${Object.keys(allData[0]?.variables || {}).length} variables)...`
+          );
+
+        } catch (error) {
           failCount++;
-          console.error(`❌ Failed to process file ${fileNum}:`, fileError.message);
-          
-          // If we have enough successful downloads, continue
-          if (successCount > 0 && successCount >= urls.length * 0.5) {
-            console.log(`⚠️ Continuing with ${successCount} successful files...`);
-            continue;
+          console.error(`❌ File ${fileNum} failed:`, error);
+
+          // Continue with remaining files unless too many failures
+          if (failCount > 5 && failCount > urls.length * 0.3) {
+            throw new Error(
+              `Too many failures (${failCount}/${urls.length}). ` +
+              'Please check your credentials and try again.'
+            );
           }
-          
-          // Otherwise, throw error to stop processing
-          throw fileError;
         }
+      }
+
+      // Check if we got any data
+      if (allData.length === 0) {
+        throw new Error(
+          'No data was successfully downloaded. ' +
+          'Please check your NASA Earthdata credentials and try again.'
+        );
       }
 
       // Sort all data by timestamp
       allData.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
-      console.log('\n✅ ========================================');
-      console.log('   DOWNLOAD COMPLETE');
+      console.log(`\n✅ ========================================`);
+      console.log('   DOWNLOAD COMPLETE - BINARY NETCDF');
       console.log('========================================');
-      console.log(`   Successfully processed: ${successCount}/${urls.length} files`);
-      if (failCount > 0) {
-        console.log(`   Failed: ${failCount} files`);
-      }
-      
-      // Log dataset summary
+      console.log(`   Success: ${successCount}/${urls.length} files`);
+      console.log(`   Failed: ${failCount}/${urls.length} files`);
+      console.log(`   Total data points: ${allData.length}`);
+      console.log(`   Format: Binary NetCDF (DODS)`);
+
+      // Get summary
       const summary = getDatasetSummary(allData);
-      console.log('📊 Dataset Summary:');
-      console.log(`   Total Data Points: ${summary.totalPoints}`);
-      console.log(`   Variables: ${summary.variables.join(", ")}`);
-      console.log(`   Date Range: ${summary.dateRange?.start} to ${summary.dateRange?.end}`);
-      console.log(`   Spatial Extent: Lat [${summary.spatialExtent?.minLat?.toFixed(2)}, ${summary.spatialExtent?.maxLat?.toFixed(2)}], Lon [${summary.spatialExtent?.minLon?.toFixed(2)}, ${summary.spatialExtent?.maxLon?.toFixed(2)}]`);
+      console.log(`📊 Variables extracted: ${summary.variables.length}`);
+      console.log(`   Variable list:`, summary.variables.sort().join(', '));
+      
+      if (summary.dateRange) {
+        console.log(`   Date range: ${summary.dateRange.start} to ${summary.dateRange.end}`);
+      }
+      if (summary.spatialExtent) {
+        console.log(`   Spatial extent: Lat [${summary.spatialExtent.minLat?.toFixed(2)}, ${summary.spatialExtent.maxLat?.toFixed(2)}], Lon [${summary.spatialExtent.minLon?.toFixed(2)}, ${summary.spatialExtent.maxLon?.toFixed(2)}]`);
+      }
       console.log('========================================\n');
 
-      if (allData.length === 0) {
-        throw new Error('No data was successfully downloaded. Please try again with a different date range.');
-      }
-
       setData(allData);
-      setProgress('');
+      setProgress(
+        `✅ Successfully downloaded ${successCount}/${urls.length} Binary NetCDF files! ` +
+        `${allData.length} data points with ${summary.variables.length} variables. ` +
+        `Click "Download CSV" to export.`
+      );
 
-      // Show warning if some files failed
-      if (failCount > 0 && successCount > 0) {
-        setError(`⚠️ Warning: ${failCount} of ${urls.length} files failed to download. Showing data from ${successCount} successful files.`);
+      if (failCount > 0) {
+        setProgress(prev => prev + ` ⚠️ Note: ${failCount} files failed to download.`);
       }
 
-    } catch (err: any) {
-      console.error('Error:', err);
-      setError(err.message || 'An error occurred while fetching data');
+    } catch (error) {
+      console.error('❌ Fetch error:', error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'An unknown error occurred while fetching data'
+      );
       setProgress('');
     } finally {
       setLoading(false);
@@ -150,68 +209,36 @@ function App() {
    * This is the ONLY place where CSV download happens.
    */
   const handleDownloadCSV = () => {
-    console.log('📥 Starting CSV download...');
-    
-    // Generate CSV from all accumulated data
-    const csv = generateCSV(data); // Using human-readable version with unit conversions
-    
-    // Create blob and download
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    
-    // Generate filename with timestamp and date range
-    const firstDate = data[0]?.timestamp;
-    const lastDate = data[data.length - 1]?.timestamp;
-    const dateStr = firstDate && lastDate 
-      ? `${firstDate.toISOString().split('T')[0]}_to_${lastDate.toISOString().split('T')[0]}`
-      : Date.now();
-    
-    const filename = `nasa_gldas_consolidated_${dateStr}.csv`;
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    
-    // Cleanup
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    console.log(`✅ CSV downloaded: ${filename}`);
-    console.log(`   Contains ${data.length} data points from all processed files`);
-  };
+    if (data.length === 0) {
+      alert('No data to download. Please fetch data first.');
+      return;
+    }
 
-  /**
-   * Alternative download with raw variable names (no conversions).
-   */
-  const handleDownloadRawCSV = () => {
-    console.log('📥 Starting raw CSV download...');
-    
-    const csv = generateCSV(data); // Raw version with original variable names
+    console.log('📥 Generating CSV with all 36 variables...');
+    const csv = generateCSV(data);
+
+    // Create download
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    
-    const firstDate = data[0]?.timestamp;
-    const lastDate = data[data.length - 1]?.timestamp;
-    const dateStr = firstDate && lastDate 
-      ? `${firstDate.toISOString().split('T')[0]}_to_${lastDate.toISOString().split('T')[0]}`
-      : Date.now();
-    
-    const filename = `nasa_gldas_raw_${dateStr}.csv`;
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    
-    document.body.removeChild(a);
+
+    const now = new Date();
+    const timestamp = now
+      .toISOString()
+      .replace(/[:.]/g, '-')
+      .slice(0, 19);
+    const filename = `nasa_gldas_binary_36vars_${timestamp}.csv`;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    
-    console.log(`✅ Raw CSV downloaded: ${filename}`);
+
+    console.log(`✅ CSV downloaded: ${filename}`);
+    console.log(`   Contains ${data.length} data points with ${Object.keys(data[0]?.variables || {}).length} variables`);
   };
 
   return (
@@ -219,6 +246,9 @@ function App() {
       <div className="app-header">
         <h1>🛰️ NASA GLDAS Data Extractor</h1>
         <p>Extract historical weather data from NASA's Global Land Data Assimilation System</p>
+        <p style={{ fontSize: '0.9rem', color: '#4CAF50', fontWeight: 'bold', marginTop: '0.5rem' }}>
+          ✨ Binary NetCDF Format - ALL 36 VARIABLES
+        </p>
       </div>
 
       <InputForm onSubmit={handleFetchData} loading={loading} />
@@ -238,9 +268,9 @@ function App() {
 
       {data.length > 0 && (
         <div className="results">
-          <h3>📊 Extracted Weather Data</h3>
+          <h3>📊 Extracted Weather Data (Binary NetCDF)</h3>
           <p className="results-count">
-            Total: {data.length} data points from all files
+            Total: {data.length} data points • {Object.keys(data[0]?.variables || {}).length} variables
           </p>
 
           <div className="table-container">
@@ -262,7 +292,7 @@ function App() {
                       <td>{point.timestamp.toLocaleString()}</td>
                       <td>{point.lat.toFixed(4)}</td>
                       <td>{point.lon.toFixed(4)}</td>
-                      <td>{varNames}{varCount > 3 ? `, +${varCount - 3} more` : ''}</td>
+                      <td>{varNames}{varCount > 3 ? ` +${varCount - 3} more` : ''}</td>
                     </tr>
                   );
                 })}
@@ -274,18 +304,14 @@ function App() {
             <p className="results-count">Showing first 20 of {data.length} records</p>
           )}
 
-          <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-            <button className="download-btn" onClick={handleDownloadCSV}>
-              📥 Download Consolidated CSV ({data.length} records)
-            </button>
-            <button className="btn-secondary" onClick={handleDownloadRawCSV}>
-              📥 Download Raw Data (Original Variable Names)
-            </button>
-          </div>
-          
+          <button className="download-btn" onClick={handleDownloadCSV}>
+            📥 Download CSV with All 36 Variables ({data.length} records)
+          </button>
+
           <p style={{ marginTop: '1rem', fontSize: '0.9rem', color: '#666' }}>
-            💡 Tip: The consolidated CSV includes all measurements from all downloaded files, 
-            with human-readable column names and unit conversions.
+            💡 CSV includes: Energy fluxes (5), Water balance (6), Surface (4), 
+            Soil moisture (4 layers), Soil temperature (4 layers), Evaporation (4), 
+            Other (3), Forcing (7) = 36 total variables
           </p>
         </div>
       )}

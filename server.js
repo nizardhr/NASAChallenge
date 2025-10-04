@@ -1,12 +1,12 @@
 /**
  * ============================================================================
- * NASA PROXY SERVER - EARTHDATA AUTHENTICATION WITH COOKIE JAR
+ * NASA PROXY SERVER - BINARY NETCDF SUPPORT
  * ============================================================================
  * 
- * AUTHENTICATION METHOD: HTTP Basic Auth with Cookie Session Management
- * - Uses NASA Earthdata Login credentials (username/password)
- * - Properly handles cookie-based session across redirects
- * - Required for OPeNDAP data access
+ * CRITICAL FIX: Handles BINARY NetCDF data (.dods format)
+ * - Downloads binary data as ArrayBuffer
+ * - Converts to base64 for JSON transmission
+ * - Supports both ASCII and binary formats
  * 
  * ============================================================================
  */
@@ -26,7 +26,7 @@ const NASA_USERNAME = process.env.NASA_USERNAME;
 const NASA_PASSWORD = process.env.NASA_PASSWORD;
 
 // Configuration
-const DOWNLOAD_TIMEOUT = 30000; // 30 seconds
+const DOWNLOAD_TIMEOUT = 60000; // 60 seconds (binary files are larger)
 const MAX_RETRIES = 2;
 
 // ============================================================================
@@ -86,16 +86,21 @@ app.get('/api/health', (req, res) => {
     credentialsConfigured: !!(NASA_USERNAME && NASA_PASSWORD),
     username: NASA_USERNAME ? `${NASA_USERNAME.substring(0, 3)}***` : 'not configured',
     uptime: process.uptime(),
-    timeout: `${DOWNLOAD_TIMEOUT / 1000}s`
+    timeout: `${DOWNLOAD_TIMEOUT / 1000}s`,
+    format: 'Binary NetCDF (DODS) + ASCII supported'
   });
 });
 
 // ============================================================================
-// HELPER: NASA AUTHENTICATION WITH COOKIE JAR
+// HELPER: NASA AUTHENTICATION WITH COOKIE JAR - BINARY SUPPORT
 // ============================================================================
 
 async function downloadWithAuth(url) {
   console.log('🔐 Starting NASA authentication flow...');
+  
+  // Detect if binary NetCDF format
+  const isBinaryFormat = url.includes('.dods?') || url.includes('.nc4.nc4');
+  console.log(`   Format detected: ${isBinaryFormat ? 'Binary NetCDF (DODS)' : 'ASCII text'}`);
   
   // Create cookie jar to store session cookies
   const cookieJar = new CookieJar();
@@ -131,7 +136,7 @@ async function downloadWithAuth(url) {
     let response = await fetch(url, {
       method: 'GET',
       headers: {
-        'User-Agent': 'GLDAS-Downloader/1.0',
+        'User-Agent': 'GLDAS-Binary-Downloader/2.0',
       },
       redirect: 'manual',
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT)
@@ -140,45 +145,40 @@ async function downloadWithAuth(url) {
     console.log('   Initial response:', response.status);
     extractCookies(response, url);
     
-    // STEP 2: Follow redirect to URS login
-    if (response.status === 302 || response.status === 301) {
-      const loginUrl = response.headers.get('location');
-      console.log('   Step 2: Redirect to URS login...');
-      console.log('   Login URL:', loginUrl?.substring(0, 60) + '...');
+    // Handle redirects manually
+    if (response.status === 302 || response.status === 301 || response.status === 307) {
+      console.log('   Step 2: Following redirect to authentication...');
+      const redirectUrl = response.headers.get('location');
+      console.log('   Redirect URL:', redirectUrl?.substring(0, 80) + '...');
       
-      // Create Basic Auth header
-      const credentials = Buffer.from(`${NASA_USERNAME}:${NASA_PASSWORD}`).toString('base64');
-      const cookieHeader = getCookieString(loginUrl);
-      
-      response = await fetch(loginUrl, {
+      // STEP 2: Follow redirect to auth page WITH credentials
+      response = await fetch(redirectUrl, {
         method: 'GET',
         headers: {
-          'Authorization': `Basic ${credentials}`,
-          'User-Agent': 'GLDAS-Downloader/1.0',
-          ...(cookieHeader && { 'Cookie': cookieHeader })
+          'Authorization': `Basic ${Buffer.from(`${NASA_USERNAME}:${NASA_PASSWORD}`).toString('base64')}`,
+          'User-Agent': 'GLDAS-Binary-Downloader/2.0',
+          'Cookie': getCookieString(redirectUrl)
         },
         redirect: 'manual',
         signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT)
       });
       
-      console.log('   URS auth response:', response.status);
-      extractCookies(response, loginUrl);
+      console.log('   Auth response:', response.status);
+      extractCookies(response, redirectUrl);
       
-      // STEP 3: Follow redirect chain back to data
-      let redirectCount = 0;
-      while ((response.status === 302 || response.status === 301) && redirectCount < 5) {
-        redirectCount++;
+      // STEP 3: Follow redirects back to data
+      let maxRedirects = 5;
+      while ((response.status === 302 || response.status === 301 || response.status === 307) && maxRedirects > 0) {
+        maxRedirects--;
         const nextUrl = response.headers.get('location');
-        console.log(`   Step ${3 + redirectCount}: Following redirect ${redirectCount}...`);
-        console.log('   To:', nextUrl?.substring(0, 60) + '...');
-        
-        const cookieHeader = getCookieString(nextUrl);
+        console.log('   Step 3: Following redirect back to data...');
+        console.log('   Next URL:', nextUrl?.substring(0, 80) + '...');
         
         response = await fetch(nextUrl, {
           method: 'GET',
           headers: {
-            'User-Agent': 'GLDAS-Downloader/1.0',
-            ...(cookieHeader && { 'Cookie': cookieHeader })
+            'User-Agent': 'GLDAS-Binary-Downloader/2.0',
+            'Cookie': getCookieString(nextUrl)
           },
           redirect: 'manual',
           signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT)
@@ -188,27 +188,74 @@ async function downloadWithAuth(url) {
         extractCookies(response, nextUrl);
       }
       
-      // STEP 4: Final request with all accumulated cookies
+      // STEP 4: Final data download
       if (response.status === 200) {
         console.log('   ✅ Authentication successful, downloading data...');
-        const textData = await response.text();
-        return {
-          success: true,
-          data: textData,
-          dataSize: textData.length
-        };
+        
+        // CRITICAL: Handle binary vs text data
+        if (isBinaryFormat) {
+          console.log('   📦 Downloading as binary ArrayBuffer...');
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          const base64Data = buffer.toString('base64');
+          
+          console.log(`   ✅ Binary data downloaded: ${(buffer.length / 1024).toFixed(2)} KB`);
+          console.log(`   ✅ Base64 encoded: ${(base64Data.length / 1024).toFixed(2)} KB`);
+          
+          return {
+            success: true,
+            data: base64Data,
+            dataSize: buffer.length,
+            format: 'binary'
+          };
+        } else {
+          console.log('   📄 Downloading as ASCII text...');
+          const textData = await response.text();
+          
+          console.log(`   ✅ Text data downloaded: ${(textData.length / 1024).toFixed(2)} KB`);
+          
+          return {
+            success: true,
+            data: textData,
+            dataSize: textData.length,
+            format: 'ascii'
+          };
+        }
       } else {
         throw new Error(`Final response was ${response.status} instead of 200`);
       }
     } else if (response.status === 200) {
       // Direct access (no auth needed)
       console.log('   ✅ Direct access granted');
-      const textData = await response.text();
-      return {
-        success: true,
-        data: textData,
-        dataSize: textData.length
-      };
+      
+      // CRITICAL: Handle binary vs text data
+      if (isBinaryFormat) {
+        console.log('   📦 Downloading as binary ArrayBuffer...');
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const base64Data = buffer.toString('base64');
+        
+        console.log(`   ✅ Binary data downloaded: ${(buffer.length / 1024).toFixed(2)} KB`);
+        
+        return {
+          success: true,
+          data: base64Data,
+          dataSize: buffer.length,
+          format: 'binary'
+        };
+      } else {
+        console.log('   📄 Downloading as ASCII text...');
+        const textData = await response.text();
+        
+        console.log(`   ✅ Text data downloaded: ${(textData.length / 1024).toFixed(2)} KB`);
+        
+        return {
+          success: true,
+          data: textData,
+          dataSize: textData.length,
+          format: 'ascii'
+        };
+      }
     } else {
       throw new Error(`Unexpected initial response: ${response.status}`);
     }
@@ -236,7 +283,8 @@ async function downloadWithRetry(url, maxRetries = MAX_RETRIES) {
       const responseTime = Date.now() - startTime;
 
       console.log('✅ Download successful!');
-      console.log('   Data size:', result.dataSize, 'characters');
+      console.log('   Format:', result.format);
+      console.log('   Data size:', (result.dataSize / 1024).toFixed(2), 'KB');
       console.log('   Total time:', responseTime, 'ms\n');
 
       return {
@@ -262,7 +310,7 @@ async function downloadWithRetry(url, maxRetries = MAX_RETRIES) {
 }
 
 // ============================================================================
-// GLDAS FILE DOWNLOAD ENDPOINT
+// GLDAS FILE DOWNLOAD ENDPOINT - BINARY NETCDF SUPPORT
 // ============================================================================
 
 app.post('/api/download-gldas', async (req, res) => {
@@ -274,6 +322,7 @@ app.post('/api/download-gldas', async (req, res) => {
 
   console.log('📋 Request Details:');
   console.log('   URL:', url ? url.substring(0, 100) + '...' : 'missing');
+  console.log('   Format:', url?.includes('.dods?') ? 'Binary NetCDF (DODS)' : 'ASCII');
   console.log('   Using credentials: ', NASA_USERNAME ? `${NASA_USERNAME.substring(0, 3)}***` : 'not configured');
   console.log('   Timeout:', DOWNLOAD_TIMEOUT / 1000, 'seconds');
 
@@ -300,9 +349,11 @@ app.post('/api/download-gldas', async (req, res) => {
       success: true,
       data: result.data,
       dataSize: result.dataSize,
+      format: result.format,
       metadata: {
         responseTime: result.responseTime,
         dataSize: result.dataSize,
+        format: result.format,
         timestamp: new Date().toISOString()
       }
     });
@@ -314,8 +365,8 @@ app.post('/api/download-gldas', async (req, res) => {
       return res.status(504).json({ 
         success: false,
         error: 'Request timeout',
-        message: `Download took longer than ${DOWNLOAD_TIMEOUT / 1000} seconds. NASA servers may be slow. Try selecting a smaller date range.`,
-        suggestion: 'Reduce the date range to download fewer files at once.'
+        message: `Download took longer than ${DOWNLOAD_TIMEOUT / 1000} seconds. NASA servers may be slow.`,
+        suggestion: 'Try a smaller date range or try again later.'
       });
     }
 
@@ -323,8 +374,8 @@ app.post('/api/download-gldas', async (req, res) => {
       return res.status(401).json({
         success: false,
         error: 'Authentication failed',
-        message: 'NASA Earthdata credentials are invalid. Please check NASA_USERNAME and NASA_PASSWORD in .env file.',
-        suggestion: 'Verify your credentials at https://urs.earthdata.nasa.gov'
+        message: 'NASA Earthdata credentials are invalid.',
+        suggestion: 'Verify credentials at https://urs.earthdata.nasa.gov'
       });
     }
 
@@ -348,7 +399,7 @@ app.post('/api/download-gldas', async (req, res) => {
       success: false,
       error: 'Download failed',
       message: error.message,
-      suggestion: 'If this persists, try a smaller date range or try again later.'
+      suggestion: 'If this persists, try again later.'
     });
   }
 });
@@ -379,7 +430,7 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log('\n');
   console.log('🚀 ============================================');
-  console.log('   NASA GLDAS PROXY SERVER');
+  console.log('   NASA GLDAS PROXY SERVER - BINARY NETCDF');
   console.log(' ============================================');
   console.log('');
   console.log(` ✅ Server: http://localhost:${PORT}`);
@@ -388,13 +439,12 @@ app.listen(PORT, () => {
   console.log(` 🔑 Auth: Basic (Earthdata Login + Cookies)`);
   console.log(` 👤 Username: ${NASA_USERNAME.substring(0, 3)}***`);
   console.log(` ⏱️  Timeout: ${DOWNLOAD_TIMEOUT / 1000} seconds`);
-  console.log(` 🔄 Max Retries: ${MAX_RETRIES}`);
+  console.log(` 📦 Formats: Binary NetCDF (DODS) + ASCII`);
   console.log('');
-  console.log(' 📋 AUTHENTICATION:');
-  console.log('   Using NASA Earthdata Login with cookie jar');
-  console.log('   Properly handles redirect chain and sessions');
-  console.log('');
-  console.log(' 💡 Tip: Select smaller date ranges if timeouts occur');
+  console.log(' 📋 BINARY NETCDF SUPPORT:');
+  console.log('   ✅ Handles .dods format (Binary NetCDF-4)');
+  console.log('   ✅ Converts to base64 for JSON transmission');
+  console.log('   ✅ ALL 36 GLDAS variables supported');
   console.log('');
   console.log(' Press Ctrl+C to stop');
   console.log('');
