@@ -67,7 +67,7 @@ function App() {
         );
 
         try {
-          const response = await fetch('/api/download-gldas', {
+          const response = await fetch('http://localhost:3000/api/download-gldas', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
